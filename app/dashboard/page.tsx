@@ -1,72 +1,89 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import supabase from "@utils/supabaseClient";
-import Link from "next/link";
-
-interface Profile {
-  user_id: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  team: string;
-  strava_connected: boolean;
-}
+import { supabase } from "@/lib/supabaseClient";
+import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const router = useRouter();
+  const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchProfile = async () => {
-      const userId = localStorage.getItem("user_id");
-      if (!userId) {
-        setLoading(false);
-        return;
-      }
+      try {
+        // 1️⃣ Read user_id from cookie
+        const cookies = document.cookie.split(";").reduce((acc: any, cookie) => {
+          const [key, value] = cookie.trim().split("=");
+          acc[key] = value;
+          return acc;
+        }, {});
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id, first_name, last_name, email, team, strava_connected")
-        .eq("user_id", userId)
-        .single();
+        const userId = cookies["user_id"];
 
-      if (error) {
-        console.error("Error fetching profile:", error.message);
-      } else {
+        if (!userId) {
+          router.push("/register");
+          return;
+        }
+
+        // 2️⃣ Fetch profile including team
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("user_id", userId)
+          .single();
+
+        if (error || !data) {
+          console.error("No profile found:", error);
+          router.push("/register");
+          return;
+        }
+
         setProfile(data);
+      } catch (err) {
+        console.error("Unexpected error:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchProfile();
-  }, []);
+  }, [router]);
 
-  if (loading) return <p className="text-white p-6">Loading...</p>;
-
-  if (!profile) return <p className="text-white p-6">No profile found. Please register.</p>;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#0a1433] text-white">
+        Loading...
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
-      <h1 className="text-2xl font-bold mb-6">
-        Welcome, {profile.first_name} {profile.last_name}!
-      </h1>
-      <p className="mb-4">Team: {profile.team}</p>
-
-      {profile.strava_connected ? (
-        <Link href="/activities">
-          <button className="px-6 py-2 bg-green-600 hover:bg-green-700 rounded">
+    <div className="flex items-center justify-center min-h-screen bg-[#0a1433] text-white">
+      <div className="bg-[#112255] p-8 rounded-xl shadow-lg w-[400px] text-center">
+        <h1 className="text-2xl font-bold mb-4">
+          Welcome, {profile.first_name} {profile.last_name}!
+        </h1>
+        <p className="mb-4">
+          <strong>Team:</strong>{" "}
+          {profile.team ? profile.team : "No team assigned"}
+        </p>
+        {!profile.strava_connected ? (
+          <a
+            href="/api/strava/auth"
+            className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600"
+          >
+            Connect to Strava
+          </a>
+        ) : (
+          <a
+            href="/app"
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          >
             Go to Activities
-          </button>
-        </Link>
-      ) : (
-        <a
-          href={`https://www.strava.com/oauth/authorize?client_id=${process.env.NEXT_PUBLIC_STRAVA_CLIENT_ID}&response_type=code&redirect_uri=${process.env.NEXT_PUBLIC_BASE_URL}/api/strava/callback&scope=read,activity:read_all&state=${profile.user_id}`}
-          className="px-6 py-2 bg-orange-600 hover:bg-orange-700 rounded inline-block"
-        >
-          Connect to Strava
-        </a>
-      )}
+          </a>
+        )}
+      </div>
     </div>
   );
 }
