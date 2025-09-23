@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import supabase from "@/utils/supabaseClient"; // keep the path matching your project
+import supabase from "@/utils/supabaseClient";
 import toast from "react-hot-toast";
 
 export default function RegisterPage() {
@@ -15,7 +15,8 @@ export default function RegisterPage() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userId.trim() || !firstName.trim() || !lastName.trim() || !email.trim()) {
+
+    if (!userId || !firstName || !lastName || !email) {
       toast.error("Please fill all fields.");
       return;
     }
@@ -23,7 +24,7 @@ export default function RegisterPage() {
     try {
       setLoading(true);
 
-      // 1) check employee_master for team
+      // 1️⃣ Lookup team from employee_master
       const { data: emp, error: empError } = await supabase
         .from("employee_master")
         .select("team")
@@ -32,16 +33,16 @@ export default function RegisterPage() {
 
       if (empError) {
         console.error("Employee lookup error:", empError);
-        toast.error("Error looking up employee. Try again.");
+        toast.error("Error looking up employee.");
         return;
       }
 
-      if (!emp) {
+      if (!emp || !emp.team) {
         toast.error("Employee ID not found in master list.");
         return;
       }
 
-      // 2) check if profile already exists
+      // 2️⃣ Check if already registered
       const { data: existing, error: fetchError } = await supabase
         .from("profiles")
         .select("access_token")
@@ -50,27 +51,30 @@ export default function RegisterPage() {
 
       if (fetchError) {
         console.error("Profile fetch error:", fetchError);
-        toast.error("Error checking existing profile.");
+        toast.error("Error checking profile.");
         return;
       }
 
       if (existing) {
-        // already registered: set cookie and redirect appropriately
-        document.cookie = `user_id=${userId.trim()}; path=/; max-age=${60 * 60 * 24 * 365}`;
+        // already registered → set cookie and redirect
+        document.cookie = `user_id=${userId.trim()}; path=/; max-age=31536000`;
         toast.success("Welcome back!");
-        if (existing.access_token) router.push("/app");
-        else router.push("/dashboard");
+        if (existing.access_token) {
+          router.push("/app");
+        } else {
+          router.push("/dashboard");
+        }
         return;
       }
 
-      // 3) insert into profiles with team from employee_master
+      // 3️⃣ Insert new profile
       const { error: insertError } = await supabase.from("profiles").insert([
         {
           user_id: userId.trim(),
           first_name: firstName.trim(),
           last_name: lastName.trim(),
           email: email.trim(),
-          team: emp.team ?? null,
+          team: emp.team, // ✅ ensure team is inserted
         },
       ]);
 
@@ -80,10 +84,13 @@ export default function RegisterPage() {
         return;
       }
 
-      // 4) set cookie and redirect to dashboard
-      document.cookie = `user_id=${userId.trim()}; path=/; max-age=${60 * 60 * 24 * 365}`;
+      // 4️⃣ Save cookie and redirect
+      document.cookie = `user_id=${userId.trim()}; path=/; max-age=31536000`;
       toast.success("Registration successful!");
       router.push("/dashboard");
+    } catch (err) {
+      console.error("Unexpected error:", err);
+      toast.error("Something went wrong.");
     } finally {
       setLoading(false);
     }
@@ -91,96 +98,73 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0a1a3f] px-4">
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-xl p-8 text-gray-900">
-          {/* Visible title with strong contrast */}
-          <h1 className="text-center text-2xl font-extrabold text-blue-900 mb-6">
-            AAP – Move-Athon-Mania
-            <div className="text-lg font-semibold">Employee Registration</div>
-          </h1>
+      <div className="w-full max-w-md bg-white text-gray-900 rounded-2xl shadow-lg p-8">
+        {/* Title */}
+        <h1 className="text-2xl font-bold text-center text-blue-900 mb-6">
+          AAP – Move-Athon-Mania
+          <div className="text-lg font-semibold">Employee Registration</div>
+        </h1>
 
-          <form onSubmit={handleRegister} className="space-y-4">
-            <div>
-              <label htmlFor="userId" className="block text-sm font-medium text-gray-700 mb-1">
-                Employee ID
-              </label>
-              <input
-                id="userId"
-                name="userId"
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-                placeholder="E.g. U262861"
-                required
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                autoComplete="off"
-              />
-            </div>
+        {/* Form */}
+        <form onSubmit={handleRegister} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Employee ID</label>
+            <input
+              type="text"
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              placeholder="e.g. U262861"
+              required
+              className="w-full border rounded-lg px-3 py-2 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
 
-            <div>
-              <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
-                First name
-              </label>
-              <input
-                id="firstName"
-                name="firstName"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                placeholder="First Name"
-                required
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                autoComplete="given-name"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">First Name</label>
+            <input
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="First Name"
+              required
+              className="w-full border rounded-lg px-3 py-2 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
 
-            <div>
-              <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
-                Last name
-              </label>
-              <input
-                id="lastName"
-                name="lastName"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                placeholder="Last Name"
-                required
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                autoComplete="family-name"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Last Name</label>
+            <input
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Last Name"
+              required
+              className="w-full border rounded-lg px-3 py-2 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
 
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                Work email
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
-                required
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                autoComplete="email"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Work Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@company.com"
+              required
+              className="w-full border rounded-lg px-3 py-2 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className={`w-full py-3 rounded-lg font-semibold text-white ${
-                loading ? "bg-blue-400 cursor-wait" : "bg-blue-600 hover:bg-blue-700"
-              }`}
-            >
-              {loading ? "Processing…" : "Register"}
-            </button>
-          </form>
-        </div>
-
-        {/* small hint */}
-        <p className="text-center text-sm text-gray-300 mt-4">
-          Already registered? <a className="text-blue-300 underline" href="/dashboard">Go to dashboard</a>
-        </p>
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full py-3 rounded-lg font-semibold text-white ${
+              loading ? "bg-blue-400 cursor-wait" : "bg-blue-600 hover:bg-blue-700"
+            }`}
+          >
+            {loading ? "Registering..." : "Register"}
+          </button>
+        </form>
       </div>
     </div>
   );
