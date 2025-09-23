@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { createClient } from "@/utils/supabase/server";
 
 export async function GET() {
   try {
@@ -16,59 +11,22 @@ export async function GET() {
       return NextResponse.json({ error: "No user session found" }, { status: 401 });
     }
 
-    // Get Strava tokens for this user
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("access_token, refresh_token, strava_id")
-      .eq("user_id", user_id)
-      .single();
+    const supabase = createClient();
 
-    if (profileError || !profile) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
-    }
-
-    const { access_token } = profile;
-
-    // Fetch activities from Strava API
-    const activitiesResponse = await fetch(
-      "https://www.strava.com/api/v3/athlete/activities?per_page=50",
-      {
-        headers: { Authorization: `Bearer ${access_token}` },
-      }
-    );
-
-    const activities = await activitiesResponse.json();
-
-    if (!activitiesResponse.ok) {
-      return NextResponse.json(
-        { error: "Failed to fetch activities", details: activities },
-        { status: activitiesResponse.status }
-      );
-    }
-
-    // Insert or update activities in DB with employee user_id
-    const mappedActivities = activities.map((act: any) => ({
-      id: act.id,
-      user_id, // ✅ use employee Uxxxx ID, not strava:xxxx
-      name: act.name,
-      type: act.type,
-      distance: act.distance / 1000, // meters → km
-      moving_time: act.moving_time,
-      start_date: act.start_date,
-    }));
-
-    const { error: upsertError } = await supabase
+    const { data, error } = await supabase
       .from("activities")
-      .upsert(mappedActivities, { onConflict: "id" });
+      .select("*")
+      .eq("user_id", user_id)
+      .order("start_date", { ascending: false });
 
-    if (upsertError) {
-      console.error("Error saving activities:", upsertError.message);
-      return NextResponse.json({ error: "Error saving activities" }, { status: 500 });
+    if (error) {
+      console.error("Supabase fetch error:", error);
+      return NextResponse.json({ error: "Error fetching activities" }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, activities: mappedActivities });
-  } catch (err: any) {
-    console.error("Activities error:", err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ activities: data }, { status: 200 });
+  } catch (err) {
+    console.error("Unexpected error:", err);
+    return NextResponse.json({ error: "Unexpected error" }, { status: 500 });
   }
 }

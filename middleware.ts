@@ -1,50 +1,45 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { createClient } from "@/utils/supabase/middleware";
 
 export async function middleware(req: NextRequest) {
-  const url = req.nextUrl.clone();
+  const res = NextResponse.next();
 
-  // get user_id cookie
-  const userId = req.cookies.get("user_id")?.value;
+  // Access user_id from cookies
+  const user_id = req.cookies.get("user_id")?.value;
 
-  // if no cookie → always go to /register
-  if (!userId && !url.pathname.startsWith("/register")) {
-    url.pathname = "/register";
-    return NextResponse.redirect(url);
+  // Paths that don’t need protection
+  const publicPaths = ["/register", "/api", "/favicon.ico", "/_next"];
+  if (publicPaths.some((path) => req.nextUrl.pathname.startsWith(path))) {
+    return res;
   }
 
-  // if user exists
-  if (userId) {
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("access_token")
-      .eq("user_id", userId)
-      .single();
-
-    // no profile in DB → send to register
-    if (!profile && !url.pathname.startsWith("/register")) {
-      url.pathname = "/register";
-      return NextResponse.redirect(url);
-    }
-
-    // profile exists but no Strava token → send to dashboard
-    if (profile && !profile.access_token && url.pathname !== "/dashboard") {
-      url.pathname = "/dashboard";
-      return NextResponse.redirect(url);
-    }
-
-    // profile exists and Strava connected → allow /app
+  // If no user_id → force to register
+  if (!user_id) {
+    return NextResponse.redirect(new URL("/register", req.url));
   }
 
-  return NextResponse.next();
+  // Check profile in Supabase
+  const supabase = createClient(req, res);
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("team, access_token")
+    .eq("user_id", user_id)
+    .single();
+
+  if (error || !profile) {
+    return NextResponse.redirect(new URL("/register", req.url));
+  }
+
+  // If registered but no Strava connected → stay on dashboard
+  if (!profile.access_token && req.nextUrl.pathname.startsWith("/app")) {
+    return NextResponse.redirect(new URL("/dashboard", req.url));
+  }
+
+  return res;
 }
 
+// Run middleware on these routes
 export const config = {
-  matcher: ["/", "/app/:path*", "/dashboard"],
+  matcher: ["/app/:path*", "/dashboard", "/register"],
 };
