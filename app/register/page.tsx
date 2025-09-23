@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import supabase from "@/utils/supabaseClient";
 import toast from "react-hot-toast";
+import { useRouter } from "next/navigation";
 
 export default function RegisterPage() {
-  const [userId, setUserId] = useState(""); // Employee ID
+  const [userId, setUserId] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -15,131 +15,97 @@ export default function RegisterPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    try {
-      // 🔎 Lookup employee in employee_master
-      const { data: emp, error: empError } = await supabase
-        .from("employee_master")
-        .select("team")
-        .eq("user_id", userId) // ⚠️ adjust if your field is different
-        .maybeSingle();
-
-      if (empError) {
-        console.error("Employee lookup error:", empError.message);
-        toast.error("Error fetching employee details.");
-        return;
-      }
-
-      if (!emp) {
-        toast.error("Invalid Employee ID. Please check and try again.");
-        return;
-      }
-
-      // 🔎 Check if already registered
-      const { data: existing, error: fetchError } = await supabase
-        .from("profiles")
-        .select("user_id, access_token")
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (fetchError) {
-        console.error("Fetch error:", fetchError.message);
-        toast.error("Something went wrong.");
-        return;
-      }
-
-      if (existing) {
-        // Already registered → redirect appropriately
-        if (existing.access_token) {
-          router.push("/app");
-        } else {
-          router.push("/dashboard");
-        }
-        return;
-      }
-
-      // 📝 Insert into profiles
-      const { error: insertError } = await supabase.from("profiles").insert([
-        {
-          user_id: userId,
-          first_name: firstName,
-          last_name: lastName,
-          email,
-          team: emp.team, // from employee_master
-        },
-      ]);
-
-      if (insertError) {
-        console.error("Insert error:", insertError.message);
-        toast.error("Error registering employee.");
-        return;
-      }
-
-      toast.success("Registered successfully!");
-      router.push("/dashboard");
-    } catch (err) {
-      console.error("Unexpected error:", err);
-      toast.error("Something went wrong.");
+    if (!userId || !firstName || !lastName || !email) {
+      toast.error("Please fill all fields.");
+      return;
     }
+
+    // check if user already exists
+    const { data: existingUser } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (existingUser) {
+      toast.success("Welcome back!");
+      // Save user_id in cookie
+      document.cookie = `user_id=${userId}; path=/; max-age=31536000`;
+      // if strava not connected, go to dashboard
+      if (!existingUser.access_token) {
+        router.push("/dashboard");
+      } else {
+        router.push("/app");
+      }
+      return;
+    }
+
+    // insert new user
+    const { error } = await supabase.from("profiles").insert([
+      {
+        user_id: userId,
+        first_name: firstName,
+        last_name: lastName,
+        email,
+      },
+    ]);
+
+    if (error) {
+      console.error("Insert error:", error.message);
+      toast.error("Error registering employee.");
+      return;
+    }
+
+    // save cookie
+    document.cookie = `user_id=${userId}; path=/; max-age=31536000`;
+
+    toast.success("Registration successful!");
+    router.push("/dashboard");
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-blue-950 text-white px-4">
-      <form
-        onSubmit={handleRegister}
-        className="bg-white text-gray-900 p-6 rounded-xl shadow-lg w-full max-w-md space-y-4"
-      >
-        {/* Page Title */}
-        <h1 className="text-xl font-bold text-blue-900 text-center">
-          AAP – Move-Athon-Mania <br /> Employee Registration
+    <div className="min-h-screen flex items-center justify-center bg-[#0a1a3f]">
+      <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md">
+        <h1 className="text-2xl font-bold mb-6 text-center">
+          AAP – Move-Athon-Mania Employee Registration
         </h1>
-
-        {/* Employee ID */}
-        <input
-          type="text"
-          placeholder="Employee ID"
-          value={userId}
-          onChange={(e) => setUserId(e.target.value)}
-          className="w-full p-2 border rounded"
-          required
-        />
-
-        {/* First Name */}
-        <input
-          type="text"
-          placeholder="First Name"
-          value={firstName}
-          onChange={(e) => setFirstName(e.target.value)}
-          className="w-full p-2 border rounded"
-          required
-        />
-
-        {/* Last Name */}
-        <input
-          type="text"
-          placeholder="Last Name"
-          value={lastName}
-          onChange={(e) => setLastName(e.target.value)}
-          className="w-full p-2 border rounded"
-          required
-        />
-
-        {/* Work Email */}
-        <input
-          type="email"
-          placeholder="Work Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full p-2 border rounded"
-          required
-        />
-
-        <button
-          type="submit"
-          className="w-full bg-blue-700 text-white py-2 rounded hover:bg-blue-800"
-        >
-          Register
-        </button>
-      </form>
+        <form onSubmit={handleRegister} className="space-y-4">
+          <input
+            type="text"
+            placeholder="Employee ID"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            className="w-full p-3 border rounded-lg"
+          />
+          <input
+            type="text"
+            placeholder="First Name"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            className="w-full p-3 border rounded-lg"
+          />
+          <input
+            type="text"
+            placeholder="Last Name"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            className="w-full p-3 border rounded-lg"
+          />
+          <input
+            type="email"
+            placeholder="Work Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full p-3 border rounded-lg"
+          />
+          <button
+            type="submit"
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700"
+          >
+            Register
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
