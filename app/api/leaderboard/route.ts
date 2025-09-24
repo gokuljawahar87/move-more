@@ -49,8 +49,9 @@ export async function GET() {
 
     for (const act of activities) {
       const km = Number(act.distance || 0) / 1000;
-      const name = `${act.profiles?.first_name ?? ""} ${act.profiles?.last_name ?? ""}`.trim();
-      const team = act.profiles?.team ?? null;
+      const profile = Array.isArray(act.profiles) ? act.profiles[0] : act.profiles;
+      const name = `${profile?.first_name ?? ""} ${profile?.last_name ?? ""}`.trim();
+      const team = profile?.team ?? null;
 
       if (!userTotals[act.user_id]) {
         userTotals[act.user_id] = { name, team, run: 0, walk: 0, cycle: 0, points: 0 };

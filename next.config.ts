@@ -4,8 +4,7 @@ import path from "path";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true, // helps catch potential issues
-  swcMinify: true,       // enables SWC-based minification
-
+  
   webpack(config) {
     // Add alias support
     config.resolve.alias = {

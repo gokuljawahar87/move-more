@@ -7,13 +7,13 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
-    const state = searchParams.get("state"); // user_id or session state
+    const state = searchParams.get("state"); // state = user_id
 
     if (!code || !state) {
       return NextResponse.json({ error: "Missing code or state" }, { status: 400 });
     }
 
-    // ✅ Exchange code for access token
+    // ✅ Exchange Strava code for access token
     const tokenRes = await fetch("https://www.strava.com/oauth/token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -36,14 +36,14 @@ export async function GET(req: Request) {
     const activities = await fetchStravaActivities(access_token);
 
     if (!activities.length) {
-      return NextResponse.json({ message: "No activities found" });
+      return NextResponse.redirect(new URL("/app", req.url));
     }
 
-    // ✅ Upsert activities into Supabase
+    // ✅ Insert/Update activities in Supabase
     const { error } = await supabaseAdmin.from("activities").upsert(
       activities.map((a) => ({
-        user_id: state, // state = user_id from registration/login
-        strava_id: a.strava_id, // unique key for dedupe
+        user_id: state, // from state param (registration step)
+        strava_id: a.strava_id, // must exist as unique key in DB
         name: a.name,
         type: a.type,
         distance: a.distance,
@@ -51,12 +51,20 @@ export async function GET(req: Request) {
         start_date: a.start_date,
         strava_url: a.strava_url,
       })),
-      { onConflict: "strava_id" } // ✅ prevent duplicates, update if changed
+      { onConflict: "strava_id" } // ensures no duplicates + auto-update fields
     );
 
     if (error) throw error;
 
-    return NextResponse.redirect(new URL("/app", req.url));
+    // ✅ Persist session cookie
+    const res = NextResponse.redirect(new URL("/app", req.url));
+    res.cookies.set("user_id", state, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+
+    return res;
   } catch (err: any) {
     console.error("Strava callback error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
