@@ -1,12 +1,9 @@
-// app/layout.tsx
+import "./globals.css";
 import type { Metadata } from "next";
-import "./globals.css"; // ✅ relative path (not alias)
-
-import { Toaster } from "react-hot-toast";
 
 export const metadata: Metadata = {
-  title: "Move-a-thon Mania",
-  description: "AAP Fitness Event",
+  title: "Move-Athon Mania",
+  description: "Get Moving, Get Winning!",
 };
 
 export default function RootLayout({
@@ -16,9 +13,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      <head>
+        {/* Load Material Symbols Outlined */}
+        <link
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="bg-blue-950 text-white">
         {children}
-        <Toaster position="top-right" />
       </body>
     </html>
   );

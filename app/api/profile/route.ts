@@ -1,29 +1,30 @@
 import { NextResponse } from "next/server";
-import supabase from "@/utils/supabaseClient";
+import { cookies } from "next/headers";
+import { supabase } from "@/lib/supabaseClient";
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(req.url);
-    const user_id = searchParams.get("user_id");
+    const cookieStore = cookies();
+    const user_id = cookieStore.get("user_id")?.value;
 
     if (!user_id) {
-      return NextResponse.json({ error: "Missing user_id" }, { status: 400 });
+      return NextResponse.json({ error: "No user session found" }, { status: 401 });
     }
 
+    // Fetch profile from Supabase
     const { data, error } = await supabase
       .from("profiles")
-      .select("access_token, refresh_token, expires_at")
+      .select("user_id, first_name, last_name, email, team, strava_connected")
       .eq("user_id", user_id)
       .single();
 
     if (error || !data) {
-      console.error("❌ Supabase fetch error:", error);
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
-    return NextResponse.json(data, { status: 200 });
-  } catch (err: any) {
-    console.error("❌ /api/profile error:", err.message);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(data);
+  } catch (err) {
+    console.error("Profile fetch error:", err);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

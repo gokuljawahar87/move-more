@@ -1,25 +1,20 @@
+// app/api/strava/callback/route.ts
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/utils/supabase/server";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { fetchStravaActivities } from "@/lib/strava"; // ✅ correct import
 
 export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const code = url.searchParams.get("code");
-
-  if (!code) {
-    return NextResponse.json({ error: "Authorization code missing" }, { status: 400 });
-  }
-
-  const cookieStore = cookies();
-  const user_id = cookieStore.get("user_id")?.value;
-
-  if (!user_id) {
-    return NextResponse.json({ error: "No user session found" }, { status: 401 });
-  }
-
   try {
-    // Exchange code for access token
-    const tokenResponse = await fetch("https://www.strava.com/oauth/token", {
+    const { searchParams } = new URL(req.url);
+    const code = searchParams.get("code");
+    const state = searchParams.get("state"); // user_id or session state
+
+    if (!code || !state) {
+      return NextResponse.json({ error: "Missing code or state" }, { status: 400 });
+    }
+
+    // ✅ Exchange code for access token
+    const tokenRes = await fetch("https://www.strava.com/oauth/token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -30,26 +25,40 @@ export async function GET(req: Request) {
       }),
     });
 
-    const tokenData = await tokenResponse.json();
-
-    if (!tokenResponse.ok) {
-      console.error("Strava token error:", tokenData);
-      return NextResponse.json({ error: "Failed to exchange token" }, { status: 500 });
+    if (!tokenRes.ok) {
+      throw new Error("Failed to exchange code for Strava token");
     }
 
-    const supabase = createClient();
+    const tokenData = await tokenRes.json();
+    const access_token = tokenData.access_token;
 
-    // Store Strava tokens
-    await supabase.from("profiles").update({
-      strava_user_id: tokenData.athlete.id,
-      access_token: tokenData.access_token,
-      refresh_token: tokenData.refresh_token,
-      token_expires_at: tokenData.expires_at,
-    }).eq("user_id", user_id);
+    // ✅ Fetch Strava activities
+    const activities = await fetchStravaActivities(access_token);
 
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_BASE_URL}/dashboard`);
-  } catch (err) {
-    console.error("Callback error:", err);
-    return NextResponse.json({ error: "Unexpected error" }, { status: 500 });
+    if (!activities.length) {
+      return NextResponse.json({ message: "No activities found" });
+    }
+
+    // ✅ Upsert activities into Supabase
+    const { error } = await supabaseAdmin.from("activities").upsert(
+      activities.map((a) => ({
+        user_id: state, // state = user_id from registration/login
+        strava_id: a.strava_id, // unique key for dedupe
+        name: a.name,
+        type: a.type,
+        distance: a.distance,
+        moving_time: a.moving_time,
+        start_date: a.start_date,
+        strava_url: a.strava_url,
+      })),
+      { onConflict: "strava_id" } // ✅ prevent duplicates, update if changed
+    );
+
+    if (error) throw error;
+
+    return NextResponse.redirect(new URL("/app", req.url));
+  } catch (err: any) {
+    console.error("Strava callback error:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

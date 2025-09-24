@@ -1,25 +1,23 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/utils/supabase/server";
+import { supabase } from "@/lib/supabaseClient";
 
-export async function GET() {
-  const cookieStore = cookies();
-  const user_id = cookieStore.get("user_id")?.value;
+export async function POST(req: Request) {
+  try {
+    const { user_id } = await req.json();
 
-  if (!user_id) {
-    return NextResponse.json({ error: "No user session found" }, { status: 401 });
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("access_token")
+      .eq("user_id", user_id)
+      .single();
+
+    if (error || !profile?.access_token) {
+      return NextResponse.json({ error: "No access token found" }, { status: 400 });
+    }
+
+    return NextResponse.json({ access_token: profile.access_token });
+  } catch (err) {
+    console.error("Get token error:", err);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
-
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("access_token, refresh_token, token_expires_at")
-    .eq("user_id", user_id)
-    .single();
-
-  if (error || !data) {
-    return NextResponse.json({ error: "No tokens found" }, { status: 404 });
-  }
-
-  return NextResponse.json(data);
 }

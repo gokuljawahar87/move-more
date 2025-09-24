@@ -14,8 +14,8 @@ type Act = {
   id: number | string;
   name: string;
   type: string;
-  distance: number; // meters from Strava
-  moving_time: number; // seconds
+  distance: number;
+  moving_time: number;
   start_date: string;
   strava_url?: string;
   profiles?: { first_name?: string; last_name?: string };
@@ -32,21 +32,16 @@ export function Activities() {
     fetch("/api/activities")
       .then((r) => r.json())
       .then((data: Act[]) => {
-        // filter to allowed activity types
         const filtered = (Array.isArray(data) ? data : [])
           .filter((a) => ALLOWED_TYPES.has(a.type))
-          // ensure we have numeric distance
           .map((a) => ({ ...a, distance: Number(a.distance || 0) }))
-          // sort ascending by date
           .sort((x, y) => new Date(x.start_date).getTime() - new Date(y.start_date).getTime());
 
         setActivities(filtered);
 
         const grouped = groupByWeek(filtered);
-        // create stable ordered keys by start timestamp (ascending)
         const keys = Object.keys(grouped).sort((a, b) => grouped[a].start - grouped[b].start);
         setWeeksOrder(keys);
-        // show latest week by default
         setCurrentWeekIndex(Math.max(0, keys.length - 1));
       })
       .catch((err) => {
@@ -58,20 +53,20 @@ export function Activities() {
 
   if (weeksOrder.length === 0) {
     return (
-      <div className="p-6 text-center text-gray-200 bg-blue-950 min-h-screen">
-        No activities for selected types (Run / TrailRun / Walk / Ride).
+      <div className="p-6 text-center text-gray-200">
+        No activities yet.
       </div>
     );
   }
 
   const weekKey = weeksOrder[currentWeekIndex];
-  const weekData = grouped[weekKey]; // { label, start, days: {dateLabel: Act[]} }
+  const weekData = grouped[weekKey];
   const days = weekData?.days || {};
   const totals = computeWeekTotals(days);
 
   return (
-    <div className="p-4 space-y-6 bg-blue-950 min-h-screen text-white">
-      {/* Week navigation + weekly totals */}
+    <div className="p-4 space-y-6 text-white">
+      {/* Week navigation */}
       <div className="flex flex-col items-center gap-3">
         <div className="flex items-center gap-4">
           <button
@@ -86,9 +81,15 @@ export function Activities() {
           <div className="text-center">
             <div className="text-lg font-bold">{weekData.label}</div>
             <div className="flex gap-2 items-center justify-center mt-2">
-              <span className="bg-white text-blue-900 px-2 py-0.5 rounded text-sm">Run {totals.run.toFixed(1)} km</span>
-              <span className="bg-white text-blue-900 px-2 py-0.5 rounded text-sm">Cycle {totals.cycle.toFixed(1)} km</span>
-              <span className="bg-white text-blue-900 px-2 py-0.5 rounded text-sm">Walk {totals.walk.toFixed(1)} km</span>
+              <span className="bg-white text-blue-900 px-2 py-0.5 rounded text-sm">
+                Run {totals.run.toFixed(1)} km
+              </span>
+              <span className="bg-white text-blue-900 px-2 py-0.5 rounded text-sm">
+                Cycle {totals.cycle.toFixed(1)} km
+              </span>
+              <span className="bg-white text-blue-900 px-2 py-0.5 rounded text-sm">
+                Walk {totals.walk.toFixed(1)} km
+              </span>
             </div>
           </div>
 
@@ -103,12 +104,14 @@ export function Activities() {
         </div>
       </div>
 
-      {/* days + activities for current week */}
+      {/* Activities by day */}
       {Object.entries(days).map(([dateLabel, acts]) => (
         <div key={dateLabel} className="space-y-3">
           <div className="flex justify-between items-center">
             <span className="font-medium">{dateLabel}</span>
-            <span className="bg-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm">{acts.length} activities</span>
+            <span className="bg-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm">
+              {acts.length} activities
+            </span>
           </div>
 
           <div className="space-y-3">
@@ -116,37 +119,38 @@ export function Activities() {
               .slice()
               .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime())
               .map((a) => (
-                <div key={String(a.id)} className="bg-white text-gray-900 p-4 rounded-xl shadow flex items-start gap-4">
-                  {/* icon */}
-                  <div className="flex-shrink-0 mt-1">
-                    {getActivityIcon(a.type)}
-                  </div>
-
-                  {/* main content */}
+                <div
+                  key={String(a.id)}
+                  className="bg-white text-gray-900 p-4 rounded-xl shadow flex items-start gap-4"
+                >
+                  <div className="flex-shrink-0 mt-1">{getActivityIcon(a.type)}</div>
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-semibold text-gray-900">
                           {a.profiles?.first_name ?? ""} {a.profiles?.last_name ?? ""}
                         </p>
-                        <p className="text-xs text-gray-500">{new Date(a.start_date).toLocaleString()}</p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(a.start_date).toLocaleString()}
+                        </p>
                       </div>
-                      <a href={a.strava_url ?? `https://www.strava.com/activities/${a.id}`} target="_blank" rel="noreferrer" className="text-orange-500 hover:text-orange-600">
+                      <a
+                        href={a.strava_url ?? `https://www.strava.com/activities/${a.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-orange-500 hover:text-orange-600"
+                      >
                         <ExternalLink size={18} />
                       </a>
                     </div>
-
                     <p className="text-md font-bold text-gray-800 mt-2">{a.name}</p>
-
                     <div className="flex gap-4 text-sm text-gray-700 mt-2">
-                      <span className="flex items-center gap-1">
-                        <span className="font-medium">{a.type}</span>
-                      </span>
-
-                      {/* convert meters -> km */}
+                      <span className="font-medium">{a.type}</span>
                       <span>{(Number(a.distance || 0) / 1000).toFixed(1)} km</span>
-
-                      <span>{Math.floor((a.moving_time || 0) / 60)}m {Math.floor((a.moving_time || 0) % 60)}s</span>
+                      <span>
+                        {Math.floor((a.moving_time || 0) / 60)}m{" "}
+                        {Math.floor((a.moving_time || 0) % 60)}s
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -158,8 +162,7 @@ export function Activities() {
   );
 }
 
-/* ------------ Helpers ------------ */
-
+/* Helpers */
 function getActivityIcon(type: string) {
   switch (type) {
     case "Run":
@@ -175,22 +178,14 @@ function getActivityIcon(type: string) {
   }
 }
 
-/** Group activities by the week (week starting Monday) and then by date label.
- * Returns an object keyed by weekStartISO:
- * { [weekStartISO]: { label: string, start: number, days: { [dateLabel]: Act[] } } }
- */
 function groupByWeek(activities: Act[]) {
-  const map: Record<
-    string,
-    { label: string; start: number; days: Record<string, Act[]> }
-  > = {};
-
+  const map: Record<string, { label: string; start: number; days: Record<string, Act[]> }> = {};
   const dateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 
   activities.forEach((a) => {
     const d = new Date(a.start_date);
-    const day = d.getDay(); // 0 = Sun
-    const diffToMonday = (day + 6) % 7; // how many days since Monday
+    const day = d.getDay();
+    const diffToMonday = (day + 6) % 7;
     const weekStart = new Date(d);
     weekStart.setDate(d.getDate() - diffToMonday);
     weekStart.setHours(0, 0, 0, 0);
@@ -200,7 +195,12 @@ function groupByWeek(activities: Act[]) {
     const weekKey = weekStart.toISOString();
     const weekLabel = `${dateFmt.format(weekStart)} – ${dateFmt.format(weekEnd)}, ${weekEnd.getFullYear()}`;
 
-    const dateLabel = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+    const dateLabel = d.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
 
     if (!map[weekKey]) map[weekKey] = { label: weekLabel, start: weekStart.getTime(), days: {} };
     if (!map[weekKey].days[dateLabel]) map[weekKey].days[dateLabel] = [];

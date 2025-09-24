@@ -1,45 +1,52 @@
+// middleware.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createClient } from "@/utils/supabase/middleware";
+import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
+  const supabase = createMiddlewareClient({ req, res });
 
-  // Access user_id from cookies
-  const user_id = req.cookies.get("user_id")?.value;
+  // Get current user
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  // Paths that don’t need protection
-  const publicPaths = ["/register", "/api", "/favicon.ico", "/_next"];
-  if (publicPaths.some((path) => req.nextUrl.pathname.startsWith(path))) {
-    return res;
-  }
+  const url = req.nextUrl.clone();
 
-  // If no user_id → force to register
-  if (!user_id) {
-    return NextResponse.redirect(new URL("/register", req.url));
-  }
+  if (user) {
+    // Check if profile exists in Supabase
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single();
 
-  // Check profile in Supabase
-  const supabase = createClient(req, res);
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("team, access_token")
-    .eq("user_id", user_id)
-    .single();
+    // No profile yet → force them to register
+    if (!profile || error) {
+      if (!url.pathname.startsWith("/register")) {
+        url.pathname = "/register";
+        return NextResponse.redirect(url);
+      }
+    }
 
-  if (error || !profile) {
-    return NextResponse.redirect(new URL("/register", req.url));
-  }
-
-  // If registered but no Strava connected → stay on dashboard
-  if (!profile.access_token && req.nextUrl.pathname.startsWith("/app")) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+    // Profile exists → force them into /app (unless they’re already there)
+    else {
+      if (
+        url.pathname === "/" ||
+        url.pathname.startsWith("/register") ||
+        url.pathname === "/dashboard"
+      ) {
+        url.pathname = "/app";
+        return NextResponse.redirect(url);
+      }
+    }
   }
 
   return res;
 }
 
-// Run middleware on these routes
+// Only run middleware on these routes
 export const config = {
-  matcher: ["/app/:path*", "/dashboard", "/register"],
+  matcher: ["/", "/register", "/app/:path*", "/dashboard"],
 };
