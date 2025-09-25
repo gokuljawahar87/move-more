@@ -35,28 +35,33 @@ export async function GET(req: Request) {
     // ✅ Fetch Strava activities
     const activities = await fetchStravaActivities(access_token);
 
-    if (!activities.length) {
-      return NextResponse.redirect(new URL("/app", req.url));
+    if (activities.length > 0) {
+      const { error: actError } = await supabaseAdmin.from("activities").upsert(
+        activities.map((a) => ({
+          user_id: state, // from state param (registration step)
+          strava_id: a.strava_id, // must exist as unique key in DB
+          name: a.name,
+          type: a.type,
+          distance: a.distance,
+          moving_time: a.moving_time,
+          start_date: a.start_date,
+          strava_url: a.strava_url,
+        })),
+        { onConflict: "strava_id" } // ensures no duplicates + auto-update fields
+      );
+
+      if (actError) throw actError;
     }
 
-    // ✅ Insert/Update activities in Supabase
-    const { error } = await supabaseAdmin.from("activities").upsert(
-      activities.map((a) => ({
-        user_id: state, // from state param (registration step)
-        strava_id: a.strava_id, // must exist as unique key in DB
-        name: a.name,
-        type: a.type,
-        distance: a.distance,
-        moving_time: a.moving_time,
-        start_date: a.start_date,
-        strava_url: a.strava_url,
-      })),
-      { onConflict: "strava_id" } // ensures no duplicates + auto-update fields
-    );
+    // ✅ Update profile with strava_connected = true
+    const { error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .update({ strava_connected: true })
+      .eq("user_id", state);
 
-    if (error) throw error;
+    if (profileError) throw profileError;
 
-    // ✅ Persist session cookie
+    // ✅ Persist session cookie + redirect back to app
     const res = NextResponse.redirect(new URL("/app", req.url));
     res.cookies.set("user_id", state, {
       httpOnly: true,
