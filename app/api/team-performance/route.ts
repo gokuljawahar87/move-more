@@ -2,16 +2,9 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(req.url);
-    const team = searchParams.get("team");
-
-    if (!team) {
-      return NextResponse.json({ error: "Missing team parameter" }, { status: 400 });
-    }
-
-    // Fetch profiles + joined activities
+    // ✅ Fetch all profiles with their activities
     const { data, error } = await supabaseAdmin
       .from("profiles")
       .select(
@@ -29,8 +22,7 @@ export async function GET(req: Request) {
           start_date
         )
       `
-      )
-      .eq("team", team);
+      );
 
     if (error) {
       console.error("❌ Supabase error:", error);
@@ -38,19 +30,32 @@ export async function GET(req: Request) {
     }
 
     if (!data || data.length === 0) {
-      console.log("⚠️ No profiles found for team:", team);
       return NextResponse.json([]);
     }
 
-    console.log("✅ Raw profiles fetched:", JSON.stringify(data, null, 2));
+    // ✅ Group by team
+    const teamMap: Record<
+      string,
+      {
+        teamName: string;
+        totalPoints: number;
+        members: {
+          name: string;
+          run: number;
+          walk: number;
+          cycle: number;
+          points: number;
+        }[];
+      }
+    > = {};
 
-    const members = data.map((profile: any) => {
+    for (const profile of data) {
+      if (!profile.team) continue; // skip users without team
+
       let run = 0,
         walk = 0,
         cycle = 0,
         points = 0;
-
-      console.log(`📊 Activities for ${profile.first_name} ${profile.last_name}:`, profile.activities);
 
       if (Array.isArray(profile.activities)) {
         profile.activities.forEach((a: any) => {
@@ -69,22 +74,32 @@ export async function GET(req: Request) {
             points += km * 10; // ✅ Cycle points
           }
         });
-      } else {
-        console.log(`⚠️ No activities array for ${profile.first_name} ${profile.last_name}`);
       }
 
-      return {
+      const member = {
         name: `${profile.first_name || ""} ${profile.last_name || ""}`.trim(),
         run,
         walk,
         cycle,
-        points, // ✅ added points field
+        points,
       };
-    });
 
-    console.log("✅ Aggregated results:", members);
+      if (!teamMap[profile.team]) {
+        teamMap[profile.team] = {
+          teamName: profile.team,
+          totalPoints: 0,
+          members: [],
+        };
+      }
 
-    return NextResponse.json(members);
+      teamMap[profile.team].members.push(member);
+      teamMap[profile.team].totalPoints += points;
+    }
+
+    // ✅ Convert to array
+    const teams = Object.values(teamMap);
+
+    return NextResponse.json(teams);
   } catch (err: any) {
     console.error("❌ API error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });

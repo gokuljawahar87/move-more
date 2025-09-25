@@ -18,10 +18,18 @@ type Act = {
   moving_time: number;
   start_date: string;
   strava_url?: string;
-  profiles?: { first_name?: string; last_name?: string };
+  profiles?: { first_name?: string; last_name?: string; team?: string };
 };
 
 const ALLOWED_TYPES = new Set(["Run", "TrailRun", "Walk", "Ride", "VirtualRide"]);
+
+// ✅ Map of team logos
+const teamLogos: Record<string, string> = {
+  "THE POWERHOUSE": "/logos/powerhouse.png",
+  "Corporate Crusaders": "/logos/crusaders.png",
+  "RAC ROCKERS": "/logos/rockers.png",
+  "ALPHA SQUAD": "/logos/alpha.png",
+};
 
 export function Activities() {
   const [activities, setActivities] = useState<Act[]>([]);
@@ -134,14 +142,25 @@ export function Activities() {
                           {new Date(a.start_date).toLocaleString()}
                         </p>
                       </div>
-                      <a
-                        href={a.strava_url ?? `https://www.strava.com/activities/${a.id}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-orange-500 hover:text-orange-600"
-                      >
-                        <ExternalLink size={18} />
-                      </a>
+
+                      <div className="flex items-center gap-3">
+                        {/* ✅ Team logo bigger + aligned left */}
+                        {a.profiles?.team && (
+                          <img
+                            src={teamLogos[a.profiles.team] || "/logos/default.png"}
+                            alt={a.profiles.team}
+                            className="w-12 h-12 rounded-full object-cover border-2 border-gray-300 mr-2"
+                          />
+                        )}
+                        <a
+                          href={a.strava_url ?? `https://www.strava.com/activities/${a.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-orange-500 hover:text-orange-600"
+                        >
+                          <ExternalLink size={20} />
+                        </a>
+                      </div>
                     </div>
                     <p className="text-md font-bold text-gray-800 mt-2">{a.name}</p>
                     <div className="flex gap-4 text-sm text-gray-700 mt-2">

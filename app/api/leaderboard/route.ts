@@ -60,28 +60,31 @@ export async function GET() {
 
       if (act.type === "Run" || act.type === "TrailRun") {
         userTotals[act.user_id].run += km;
-        userTotals[act.user_id].points += km * 15; // ✅ Run points
+        userTotals[act.user_id].points += km * 15;
       } else if (act.type === "Walk") {
         userTotals[act.user_id].walk += km;
-        userTotals[act.user_id].points += km * 5; // ✅ Walk points
+        userTotals[act.user_id].points += km * 5;
       } else if (act.type === "Ride" || act.type === "VirtualRide") {
         userTotals[act.user_id].cycle += km;
-        userTotals[act.user_id].points += km * 10; // ✅ Cycle points
+        userTotals[act.user_id].points += km * 10;
       }
     }
 
     // 3. Prepare sorted leaderboards
     const runners = Object.values(userTotals)
       .filter((u) => u.run > 0)
-      .sort((a, b) => b.run - a.run);
+      .sort((a, b) => b.run - a.run)
+      .slice(0, 3); // ✅ top 3 runners
 
     const walkers = Object.values(userTotals)
       .filter((u) => u.walk > 0)
-      .sort((a, b) => b.walk - a.walk);
+      .sort((a, b) => b.walk - a.walk)
+      .slice(0, 3); // ✅ top 3 walkers
 
     const cyclers = Object.values(userTotals)
       .filter((u) => u.cycle > 0)
-      .sort((a, b) => b.cycle - a.cycle);
+      .sort((a, b) => b.cycle - a.cycle)
+      .slice(0, 3); // ✅ top 3 cyclers
 
     // 4. Aggregate by teams
     const teamTotals: Record<string, { team: string; points: number }> = {};
@@ -91,7 +94,9 @@ export async function GET() {
       teamTotals[u.team].points += u.points;
     }
 
-    const teams = Object.values(teamTotals).sort((a, b) => b.points - a.points);
+    const teams = Object.values(teamTotals)
+      .sort((a, b) => b.points - a.points)
+      .slice(0, 3); // ✅ top 3 teams
 
     return NextResponse.json({ runners, walkers, cyclers, teams });
   } catch (err: any) {

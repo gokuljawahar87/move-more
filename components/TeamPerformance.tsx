@@ -2,94 +2,88 @@
 
 import { useEffect, useState } from "react";
 
-export function TeamPerformance() {
-  const [teams, setTeams] = useState<string[]>([]);
-  const [selectedTeam, setSelectedTeam] = useState("");
-  const [members, setMembers] = useState<any[]>([]);
+type Member = {
+  name: string;
+  run: number;
+  walk: number;
+  cycle: number;
+  points: number;
+};
 
-  // Load list of teams
+type Team = {
+  teamName: string;
+  totalPoints: number;
+  members: Member[];
+};
+
+export function TeamPerformance() {
+  const [teams, setTeams] = useState<Team[]>([]);
+
   useEffect(() => {
-    fetch("/api/teams")
+    fetch("/api/team-performance")
       .then((res) => res.json())
-      .then((data) => setTeams(Array.isArray(data) ? data : []))
-      .catch(() => setTeams([]));
+      .then((data) => {
+        if (Array.isArray(data)) {
+          // ✅ sort by points descending
+          setTeams(data.sort((a, b) => b.totalPoints - a.totalPoints));
+        }
+      })
+      .catch((err) => console.error("Failed to fetch teams:", err));
   }, []);
 
-  // Load members when team changes
-  useEffect(() => {
-    if (selectedTeam) {
-      fetch(`/api/team-performance?team=${encodeURIComponent(selectedTeam)}`)
-        .then((res) => res.json())
-        .then((data) => {
-          // Ensure it's always an array
-          if (Array.isArray(data)) {
-            setMembers(data);
-          } else if (data && typeof data === "object") {
-            setMembers([data]); // wrap single object in array
-          } else {
-            setMembers([]);
-          }
-        })
-        .catch(() => setMembers([]));
-    }
-  }, [selectedTeam]);
+  if (teams.length === 0) {
+    return (
+      <div className="p-6 text-center text-gray-200 bg-blue-950 min-h-screen">
+        No team data available yet.
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 space-y-6 bg-blue-950 min-h-screen text-white">
-      {/* Dropdown */}
-      <div>
-        <label className="block mb-2 text-sm font-medium">Select Team</label>
-        <select
-          className="w-full p-2 rounded-lg text-gray-900"
-          value={selectedTeam}
-          onChange={(e) => setSelectedTeam(e.target.value)}
+      {teams.map((team) => (
+        <div
+          key={team.teamName}
+          className="bg-white text-gray-900 rounded-2xl shadow overflow-hidden"
         >
-          <option value="">-- Choose a team --</option>
-          {teams.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </div>
+          {/* Team header */}
+          <div className="flex items-center justify-between bg-blue-700 text-white px-4 py-3">
+            <h2 className="font-bold text-lg">{team.teamName}</h2>
+            <span className="bg-white text-blue-900 px-3 py-1 rounded-full text-sm font-bold">
+              {team.totalPoints.toFixed(0)} pts
+            </span>
+          </div>
 
-      {/* Members table */}
-      {selectedTeam && (
-        <div className="bg-white text-gray-900 rounded-xl shadow-md p-4">
-          <h2 className="text-lg font-bold mb-3">{selectedTeam} Members</h2>
-
-          {members.length === 0 ? (
-            <p className="text-gray-500 text-sm">No members found.</p>
-          ) : (
-            <>
-              <div className="grid grid-cols-4 font-semibold border-b pb-2 mb-2">
-                <span>Name</span>
-                <span className="text-center">Run (km)</span>
-                <span className="text-center">Walk (km)</span>
-                <span className="text-center">Cycle (km)</span>
-              </div>
-
-              {members.map((m, i) => (
-                <div
-                  key={i}
-                  className="grid grid-cols-4 py-2 border-b last:border-b-0 text-sm"
-                >
-                  <span>{m.name ?? "Unknown"}</span>
-                  <span className="text-center">
-                    {Number(m.run || 0).toFixed(1)}
-                  </span>
-                  <span className="text-center">
-                    {Number(m.walk || 0).toFixed(1)}
-                  </span>
-                  <span className="text-center">
-                    {Number(m.cycle || 0).toFixed(1)}
-                  </span>
-                </div>
-              ))}
-            </>
-          )}
+          {/* Members */}
+          <div className="p-4">
+            <table className="w-full table-fixed text-left text-sm border-collapse">
+              <thead>
+                <tr className="border-b bg-gray-100">
+                  <th className="py-2 w-2/5">Name</th>
+                  <th className="py-2 w-1/5">Run (km, 15 pts)</th>
+                  <th className="py-2 w-1/5">Walk (km, 5 pts)</th>
+                  <th className="py-2 w-1/5">Cycle (km, 10 pts)</th>
+                  <th className="py-2 w-1/5">Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {team.members.map((m, i) => (
+                  <tr
+                    key={i}
+                    className="border-b last:border-none odd:bg-gray-50 even:bg-white"
+                  >
+                    <td className="py-2 truncate">{m.name}</td>
+                    <td className="py-2">{m.run.toFixed(1)}</td>
+                    <td className="py-2">{m.walk.toFixed(1)}</td>
+                    <td className="py-2">{m.cycle.toFixed(1)}</td>
+                    <td className="py-2 font-semibold">{m.points.toFixed(0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }
