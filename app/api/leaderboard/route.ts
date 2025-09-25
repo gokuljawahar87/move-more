@@ -1,3 +1,4 @@
+// app/api/leaderboard/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -59,13 +60,13 @@ export async function GET() {
 
       if (act.type === "Run" || act.type === "TrailRun") {
         userTotals[act.user_id].run += km;
-        userTotals[act.user_id].points += km * 100;
+        userTotals[act.user_id].points += km * 15; // ✅ Run points
       } else if (act.type === "Walk") {
         userTotals[act.user_id].walk += km;
-        userTotals[act.user_id].points += km * 50;
+        userTotals[act.user_id].points += km * 5; // ✅ Walk points
       } else if (act.type === "Ride" || act.type === "VirtualRide") {
         userTotals[act.user_id].cycle += km;
-        userTotals[act.user_id].points += km * 10;
+        userTotals[act.user_id].points += km * 10; // ✅ Cycle points
       }
     }
 

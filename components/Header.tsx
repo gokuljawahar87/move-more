@@ -1,30 +1,44 @@
 "use client";
 
-import Image from "next/image";
+import { useEffect, useState } from "react";
 
 export function Header() {
+  const [initials, setInitials] = useState("");
+
+  useEffect(() => {
+    async function fetchProfile() {
+      try {
+        const res = await fetch("/api/profile");
+        if (!res.ok) return;
+
+        const profile = await res.json();
+        if (profile?.first_name || profile?.last_name) {
+          const first = profile.first_name?.[0] ?? "";
+          const last = profile.last_name?.[0] ?? "";
+          setInitials(`${first}${last}`.toUpperCase());
+        }
+      } catch (err) {
+        console.error("Failed to fetch profile", err);
+      }
+    }
+    fetchProfile();
+  }, []);
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-blue-900 text-white flex items-center justify-between px-4 py-3 shadow-md">
-      {/* Left: Logo + Title */}
+    <header className="flex items-center justify-between px-4 py-3 bg-blue-900 text-white shadow-md fixed top-0 left-0 right-0 z-40">
+      {/* App title */}
       <div className="flex items-center gap-2">
-        <Image
+        <img
           src="/logo.png"
-          alt="Logo"
-          width={36}
-          height={36}
-          className="rounded-md"
+          alt="App Logo"
+          className="w-8 h-8 rounded"
         />
-        <span className="font-bold text-lg">AAP – Move-Athon-Mania</span>
+        <h1 className="text-lg font-semibold">AAP – Move-Athon-Mania</h1>
       </div>
 
-      {/* Right: Avatar placeholder */}
-      <div className="w-10 h-10 rounded-full bg-gray-300 border-2 border-white overflow-hidden">
-        <Image
-          src="/default-avatar.png"
-          alt="User"
-          width={40}
-          height={40}
-        />
+      {/* User initials circle */}
+      <div className="w-10 h-10 flex items-center justify-center rounded-full bg-white text-black font-bold shadow">
+        {initials || "?"}
       </div>
     </header>
   );

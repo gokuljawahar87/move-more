@@ -1,3 +1,4 @@
+// app/api/team-performance/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -46,15 +47,27 @@ export async function GET(req: Request) {
     const members = data.map((profile: any) => {
       let run = 0,
         walk = 0,
-        cycle = 0;
+        cycle = 0,
+        points = 0;
 
       console.log(`📊 Activities for ${profile.first_name} ${profile.last_name}:`, profile.activities);
 
       if (Array.isArray(profile.activities)) {
         profile.activities.forEach((a: any) => {
-          if (a.type === "Run" || a.type === "TrailRun") run += a.distance / 1000;
-          if (a.type === "Walk") walk += a.distance / 1000;
-          if (a.type === "Ride" || a.type === "VirtualRide") cycle += a.distance / 1000;
+          const km = Number(a.distance || 0) / 1000;
+
+          if (a.type === "Run" || a.type === "TrailRun") {
+            run += km;
+            points += km * 15; // ✅ Run points
+          }
+          if (a.type === "Walk") {
+            walk += km;
+            points += km * 5; // ✅ Walk points
+          }
+          if (a.type === "Ride" || a.type === "VirtualRide") {
+            cycle += km;
+            points += km * 10; // ✅ Cycle points
+          }
         });
       } else {
         console.log(`⚠️ No activities array for ${profile.first_name} ${profile.last_name}`);
@@ -65,6 +78,7 @@ export async function GET(req: Request) {
         run,
         walk,
         cycle,
+        points, // ✅ added points field
       };
     });
 

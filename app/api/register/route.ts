@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { user_id, first_name, last_name, team } = body;
+    const { user_id, first_name, last_name } = body;
 
     if (!user_id) {
       return NextResponse.json(
@@ -15,13 +15,26 @@ export async function POST(req: Request) {
       );
     }
 
+    // ✅ Look up team from employee_master
+    const { data: empData, error: empError } = await supabaseAdmin
+      .from("employee_master")
+      .select("team")
+      .eq("user_id", user_id)
+      .single();
+
+    if (empError) {
+      console.warn("Team not found in employee_master:", empError.message);
+    }
+
+    const team = empData?.team ?? null;
+
     // ✅ Insert or update profile in Supabase
     const { error } = await supabaseAdmin.from("profiles").upsert(
       {
         user_id,
         first_name,
         last_name,
-        team,
+        team, // now pulled from employee_master
       },
       { onConflict: "user_id" }
     );
