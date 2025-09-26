@@ -1,7 +1,7 @@
 // app/api/strava/callback/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { fetchStravaActivities } from "@/lib/strava"; // ✅ correct import
+import { fetchStravaActivities } from "@/lib/strava";
 
 export async function GET(req: Request) {
   try {
@@ -35,11 +35,12 @@ export async function GET(req: Request) {
     // ✅ Fetch Strava activities
     const activities = await fetchStravaActivities(access_token);
 
+    // ✅ Insert/Update activities in Supabase
     if (activities.length > 0) {
-      const { error: actError } = await supabaseAdmin.from("activities").upsert(
+      const { error } = await supabaseAdmin.from("activities").upsert(
         activities.map((a) => ({
-          user_id: state, // from state param (registration step)
-          strava_id: a.strava_id, // must exist as unique key in DB
+          user_id: state,
+          strava_id: a.strava_id,
           name: a.name,
           type: a.type,
           distance: a.distance,
@@ -47,26 +48,26 @@ export async function GET(req: Request) {
           start_date: a.start_date,
           strava_url: a.strava_url,
         })),
-        { onConflict: "strava_id" } // ensures no duplicates + auto-update fields
+        { onConflict: "strava_id" }
       );
 
-      if (actError) throw actError;
+      if (error) throw error;
     }
 
-    // ✅ Update profile with strava_connected = true
-    const { error: profileError } = await supabaseAdmin
+    // ✅ Mark profile as strava_connected
+    await supabaseAdmin
       .from("profiles")
       .update({ strava_connected: true })
       .eq("user_id", state);
 
-    if (profileError) throw profileError;
-
-    // ✅ Persist session cookie + redirect back to app
+    // ✅ Persist session cookie
     const res = NextResponse.redirect(new URL("/app", req.url));
     res.cookies.set("user_id", state, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 90, // 90 days
     });
 
     return res;

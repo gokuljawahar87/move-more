@@ -25,10 +25,14 @@ const ALLOWED_TYPES = new Set(["Run", "TrailRun", "Walk", "Ride", "VirtualRide"]
 
 // ✅ Map of team logos
 const teamLogos: Record<string, string> = {
-  "THE POWERHOUSE": "/logos/powerhouse.png",
+"THE POWERHOUSE": "/logos/powerhouse.png",
   "Corporate Crusaders": "/logos/crusaders.png",
   "RAC ROCKERS": "/logos/rockers.png",
   "ALPHA SQUAD": "/logos/alpha.png",
+  "Black Forest Brigade": "/logos/brigade.png",
+  "RACKETS": "/logos/rackets.png",
+  "VIBE TRIBE": "/logos/vibe.png",
+  "GOAT": "/logos/goat.png",
 };
 
 export function Activities() {
@@ -43,12 +47,17 @@ export function Activities() {
         const filtered = (Array.isArray(data) ? data : [])
           .filter((a) => ALLOWED_TYPES.has(a.type))
           .map((a) => ({ ...a, distance: Number(a.distance || 0) }))
-          .sort((x, y) => new Date(x.start_date).getTime() - new Date(y.start_date).getTime());
+          .sort(
+            (x, y) =>
+              new Date(x.start_date).getTime() - new Date(y.start_date).getTime()
+          );
 
         setActivities(filtered);
 
         const grouped = groupByWeek(filtered);
-        const keys = Object.keys(grouped).sort((a, b) => grouped[a].start - grouped[b].start);
+        const keys = Object.keys(grouped).sort(
+          (a, b) => grouped[a].start - grouped[b].start
+        );
         setWeeksOrder(keys);
         setCurrentWeekIndex(Math.max(0, keys.length - 1));
       })
@@ -61,9 +70,7 @@ export function Activities() {
 
   if (weeksOrder.length === 0) {
     return (
-      <div className="p-6 text-center text-gray-200">
-        No activities yet.
-      </div>
+      <div className="p-6 text-center text-gray-200">No activities yet.</div>
     );
   }
 
@@ -102,7 +109,11 @@ export function Activities() {
           </div>
 
           <button
-            onClick={() => setCurrentWeekIndex((i) => Math.min(weeksOrder.length - 1, i + 1))}
+            onClick={() =>
+              setCurrentWeekIndex((i) =>
+                Math.min(weeksOrder.length - 1, i + 1)
+              )
+            }
             disabled={currentWeekIndex === weeksOrder.length - 1}
             className="p-2 rounded-full bg-gray-700 disabled:opacity-40"
             aria-label="Next week"
@@ -113,70 +124,94 @@ export function Activities() {
       </div>
 
       {/* Activities by day */}
-      {Object.entries(days).map(([dateLabel, acts]) => (
-        <div key={dateLabel} className="space-y-3">
-          <div className="flex justify-between items-center">
-            <span className="font-medium">{dateLabel}</span>
-            <span className="bg-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm">
-              {acts.length} activities
-            </span>
-          </div>
+      {Object.entries(days)
+        // ✅ Sort days newest → oldest
+        .sort(
+          ([d1], [d2]) =>
+            new Date(d2).getTime() - new Date(d1).getTime()
+        )
+        .map(([dateLabel, acts]) => (
+          <div key={dateLabel} className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="font-medium">{dateLabel}</span>
+              <span className="bg-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm">
+                {acts.length} activities
+              </span>
+            </div>
 
-          <div className="space-y-3">
-            {acts
-              .slice()
-              .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime())
-              .map((a) => (
-                <div
-                  key={String(a.id)}
-                  className="bg-white text-gray-900 p-4 rounded-xl shadow flex items-start gap-4"
-                >
-                  <div className="flex-shrink-0 mt-1">{getActivityIcon(a.type)}</div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-gray-900">
-                          {a.profiles?.first_name ?? ""} {a.profiles?.last_name ?? ""}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {new Date(a.start_date).toLocaleString()}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        {/* ✅ Team logo bigger + aligned left */}
-                        {a.profiles?.team && (
-                          <img
-                            src={teamLogos[a.profiles.team] || "/logos/default.png"}
-                            alt={a.profiles.team}
-                            className="w-12 h-12 rounded-full object-cover border-2 border-gray-300 mr-2"
-                          />
-                        )}
-                        <a
-                          href={a.strava_url ?? `https://www.strava.com/activities/${a.id}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-orange-500 hover:text-orange-600"
-                        >
-                          <ExternalLink size={20} />
-                        </a>
-                      </div>
+            <div className="space-y-3">
+              {acts
+                .slice()
+                // ✅ Sort activities newest → oldest
+                .sort(
+                  (a, b) =>
+                    new Date(b.start_date).getTime() -
+                    new Date(a.start_date).getTime()
+                )
+                .map((a) => (
+                  <div
+                    key={String(a.id)}
+                    className="bg-white text-gray-900 p-4 rounded-xl shadow flex items-start gap-4"
+                  >
+                    <div className="flex-shrink-0 mt-1">
+                      {getActivityIcon(a.type)}
                     </div>
-                    <p className="text-md font-bold text-gray-800 mt-2">{a.name}</p>
-                    <div className="flex gap-4 text-sm text-gray-700 mt-2">
-                      <span className="font-medium">{a.type}</span>
-                      <span>{(Number(a.distance || 0) / 1000).toFixed(1)} km</span>
-                      <span>
-                        {Math.floor((a.moving_time || 0) / 60)}m{" "}
-                        {Math.floor((a.moving_time || 0) % 60)}s
-                      </span>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-gray-900">
+                            {a.profiles?.first_name ?? ""}{" "}
+                            {a.profiles?.last_name ?? ""}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(a.start_date).toLocaleString()}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          {/* ✅ Team logo bigger + aligned left */}
+                          {a.profiles?.team && (
+                            <img
+                              src={
+                                teamLogos[a.profiles.team] ||
+                                "/logos/default.png"
+                              }
+                              alt={a.profiles.team}
+                              className="w-12 h-12 rounded-full object-cover border-2 border-gray-300 mr-2"
+                            />
+                          )}
+                          <a
+                            href={
+                              a.strava_url ??
+                              `https://www.strava.com/activities/${a.id}`
+                            }
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-orange-500 hover:text-orange-600"
+                          >
+                            <ExternalLink size={20} />
+                          </a>
+                        </div>
+                      </div>
+                      <p className="text-md font-bold text-gray-800 mt-2">
+                        {a.name}
+                      </p>
+                      <div className="flex gap-4 text-sm text-gray-700 mt-2">
+                        <span className="font-medium">{a.type}</span>
+                        <span>
+                          {(Number(a.distance || 0) / 1000).toFixed(1)} km
+                        </span>
+                        <span>
+                          {Math.floor((a.moving_time || 0) / 60)}m{" "}
+                          {Math.floor((a.moving_time || 0) % 60)}s
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
     </div>
   );
 }
@@ -198,8 +233,14 @@ function getActivityIcon(type: string) {
 }
 
 function groupByWeek(activities: Act[]) {
-  const map: Record<string, { label: string; start: number; days: Record<string, Act[]> }> = {};
-  const dateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+  const map: Record<
+    string,
+    { label: string; start: number; days: Record<string, Act[]> }
+  > = {};
+  const dateFmt = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  });
 
   activities.forEach((a) => {
     const d = new Date(a.start_date);
@@ -212,7 +253,9 @@ function groupByWeek(activities: Act[]) {
     weekEnd.setDate(weekStart.getDate() + 6);
 
     const weekKey = weekStart.toISOString();
-    const weekLabel = `${dateFmt.format(weekStart)} – ${dateFmt.format(weekEnd)}, ${weekEnd.getFullYear()}`;
+    const weekLabel = `${dateFmt.format(weekStart)} – ${dateFmt.format(
+      weekEnd
+    )}, ${weekEnd.getFullYear()}`;
 
     const dateLabel = d.toLocaleDateString("en-US", {
       weekday: "short",
@@ -221,7 +264,8 @@ function groupByWeek(activities: Act[]) {
       year: "numeric",
     });
 
-    if (!map[weekKey]) map[weekKey] = { label: weekLabel, start: weekStart.getTime(), days: {} };
+    if (!map[weekKey])
+      map[weekKey] = { label: weekLabel, start: weekStart.getTime(), days: {} };
     if (!map[weekKey].days[dateLabel]) map[weekKey].days[dateLabel] = [];
     map[weekKey].days[dateLabel].push(a);
   });

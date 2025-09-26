@@ -18,6 +18,18 @@ type LeaderboardData = {
   teams: LeaderboardEntry[];
 };
 
+// ✅ Team logos map
+const teamLogos: Record<string, string> = {
+  "THE POWERHOUSE": "/logos/powerhouse.png",
+  "Corporate Crusaders": "/logos/crusaders.png",
+  "RAC ROCKERS": "/logos/rockers.png",
+  "ALPHA SQUAD": "/logos/alpha.png",
+  "Black Forest Brigade": "/logos/brigade.png",
+  "RACKETS": "/logos/rackets.png",
+  "VIBE TRIBE": "/logos/vibe.png",
+  "GOAT": "/logos/goat.png",
+};
+
 export default function Leaderboard() {
   const [data, setData] = useState<LeaderboardData>({
     runners: [],
@@ -37,24 +49,9 @@ export default function Leaderboard() {
 
   return (
     <div className="p-4 space-y-6 bg-blue-950 min-h-screen text-white">
-      <Section
-        title="🏃 Top Runners"
-        list={data.runners}
-        metric="run"
-        unit="km"
-      />
-      <Section
-        title="🚶 Top Walkers"
-        list={data.walkers}
-        metric="walk"
-        unit="km"
-      />
-      <Section
-        title="🚴 Top Cyclers"
-        list={data.cyclers}
-        metric="cycle"
-        unit="km"
-      />
+      <Section title="🏃 Top Runners" list={data.runners} metric="run" unit="km" />
+      <Section title="🚶 Top Walkers" list={data.walkers} metric="walk" unit="km" />
+      <Section title="🚴 Top Cyclers" list={data.cyclers} metric="cycle" unit="km" />
       <Section
         title="👥 Top Teams"
         list={data.teams}
@@ -98,21 +95,34 @@ function Section({
       <h2 className="text-lg font-bold mb-3">{title}</h2>
       {list && list.length > 0 ? (
         <div className="space-y-2">
-          {list.map((item, i) => (
-            <div
-              key={i}
-              className={`bg-white text-gray-900 p-4 rounded-xl shadow flex justify-between items-center border-2 ${getCardStyle(
-                i + 1
-              )}`}
-            >
-              <span className="font-medium flex items-center gap-2">
-                {getMedal(i + 1)} {isTeam ? item.team : item.name}
-              </span>
-              <span className="font-semibold">
-                {Number(item[metric] ?? 0).toFixed(1)} {unit}
-              </span>
-            </div>
-          ))}
+          {list.map((item, i) => {
+            const showLogo =
+              isTeam || (i < 3 && item.team && teamLogos[item.team]);
+
+            return (
+              <div
+                key={i}
+                className={`bg-white text-gray-900 p-4 rounded-xl shadow flex justify-between items-center border-2 ${getCardStyle(
+                  i + 1
+                )}`}
+              >
+                <span className="font-medium flex items-center gap-3">
+                  {getMedal(i + 1)}
+                  {showLogo && item.team && (
+                    <img
+                      src={teamLogos[item.team] || "/logos/default.png"}
+                      alt={item.team}
+                      className="w-8 h-8 rounded-full object-cover border"
+                    />
+                  )}
+                  {isTeam ? item.team : item.name}
+                </span>
+                <span className="font-semibold">
+                  {Number(item[metric] ?? 0).toFixed(1)} {unit}
+                </span>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <p className="text-gray-400 text-sm">No data yet</p>

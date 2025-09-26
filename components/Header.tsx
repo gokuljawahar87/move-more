@@ -28,6 +28,12 @@ export function Header() {
     fetchProfile();
   }, []);
 
+  const handleConnectStrava = () => {
+    if (!profile?.user_id) return;
+    // ✅ Redirect user to Strava auth flow with their user_id
+    window.location.href = `/api/strava/auth?user_id=${profile.user_id}`;
+  };
+
   return (
     <header className="flex items-center justify-between px-4 py-3 bg-blue-900 text-white shadow-md fixed top-0 left-0 right-0 z-40">
       {/* App title */}
@@ -36,7 +42,7 @@ export function Header() {
         <h1 className="text-lg font-semibold">AAP – Move-Athon-Mania</h1>
       </div>
 
-      {/* User initials circle */}
+      {/* User initials circle + popup */}
       <div className="relative">
         <button
           onClick={() => setMenuOpen((prev) => !prev)}
@@ -50,17 +56,18 @@ export function Header() {
             <p className="font-semibold mb-2">
               {profile?.first_name} {profile?.last_name}
             </p>
+
             {profile?.strava_connected ? (
               <p className="text-green-600 font-medium">
                 ✅ Connected to Strava
               </p>
             ) : (
-              <a
-                href="/api/strava/connect"
+              <button
+                onClick={handleConnectStrava}
                 className="block w-full text-center bg-pink-600 text-white px-3 py-2 rounded-lg hover:bg-pink-700"
               >
                 Connect to Strava
-              </a>
+              </button>
             )}
           </div>
         )}

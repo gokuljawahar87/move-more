@@ -1,7 +1,6 @@
 // app/api/register/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { cookies } from "next/headers";
 
 export async function POST(req: Request) {
   try {
@@ -34,7 +33,7 @@ export async function POST(req: Request) {
         user_id,
         first_name,
         last_name,
-        team, // now pulled from employee_master
+        team, // pulled from employee_master
       },
       { onConflict: "user_id" }
     );
@@ -44,13 +43,13 @@ export async function POST(req: Request) {
     // ✅ Prepare response
     const res = NextResponse.json({ success: true });
 
-    // ✅ Attach cookie (session persistence)
+    // ✅ Attach cookie (persistent session)
     res.cookies.set("user_id", user_id, {
       httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax", // best for first-party apps
+      secure: process.env.NODE_ENV === "production", // required for HTTPS
       path: "/",
-      maxAge: 60 * 60 * 24 * 30, // 30 days
+      maxAge: 60 * 60 * 24 * 90, // 90 days
     });
 
     return res;

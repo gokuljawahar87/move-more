@@ -16,18 +16,49 @@ export default function AppPage() {
   useEffect(() => {
     async function checkProfile() {
       try {
-        const res = await fetch("/api/profile");
+        let res = await fetch("/api/profile");
         if (!res.ok) throw new Error("Profile not found");
-        const profile = await res.json();
+
+        let profile = await res.json();
         if (!profile || !profile.user_id) {
-          router.replace("/register");
+          throw new Error("No profile found");
         }
+
+        // ✅ Save user_id in localStorage as fallback
+        localStorage.setItem("user_id", profile.user_id);
       } catch (err) {
+        console.warn("Profile check failed, trying restore:", err);
+
+        // ✅ Try restoring from localStorage
+        const savedUserId = localStorage.getItem("user_id");
+        if (savedUserId) {
+          try {
+            const restoreRes = await fetch("/api/restore-session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ user_id: savedUserId }),
+            });
+
+            if (restoreRes.ok) {
+              const restoredProfile = await restoreRes.json();
+              if (restoredProfile?.user_id) {
+                localStorage.setItem("user_id", restoredProfile.user_id);
+                setLoading(false);
+                return;
+              }
+            }
+          } catch (restoreErr) {
+            console.error("Restore session failed:", restoreErr);
+          }
+        }
+
+        // If all fails, go to registration
         router.replace("/register");
       } finally {
         setLoading(false);
       }
     }
+
     checkProfile();
   }, [router]);
 
@@ -44,7 +75,7 @@ export default function AppPage() {
       {/* Header */}
       <Header />
 
-      {/* Main content - add top padding so header does not overlap */}
+      {/* Main content - with padding so header doesn’t overlap */}
       <div className="flex-1 overflow-y-auto pb-32 pt-16">
         {activeTab === "activities" && <Activities />}
         {activeTab === "leaderboard" && <Leaderboard />}
