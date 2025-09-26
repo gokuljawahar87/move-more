@@ -70,7 +70,7 @@ export function TeamPerformance() {
   };
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="p-2 space-y-4">
       {teams.map((team, idx) => {
         const teamName = team.team ?? team.teamName ?? "Unnamed Team";
         const totalPoints = team.total_points ?? team.totalPoints ?? 0;
@@ -78,26 +78,26 @@ export function TeamPerformance() {
         return (
           <div
             key={teamName + idx}
-            className={`bg-white text-gray-900 rounded-2xl shadow-lg overflow-hidden ${getBorderClass(
+            className={`bg-white text-gray-900 rounded-xl shadow-md overflow-hidden ${getBorderClass(
               idx
             )}`}
           >
-            {/* Team header */}
-            <div className="bg-blue-700 text-white px-4 py-3 flex justify-between items-center">
-              <h2 className="text-lg font-bold uppercase flex items-center gap-2">
+            {/* Team header (smaller font for mobile) */}
+            <div className="bg-blue-700 text-white px-3 py-2 flex justify-between items-center">
+              <h2 className="text-base sm:text-lg font-semibold uppercase flex items-center gap-2">
                 {getMedal(idx)} {teamName}
               </h2>
-              <span className="bg-white text-blue-800 font-bold px-3 py-1 rounded-full">
+              <span className="bg-white text-blue-800 font-semibold px-2 py-0.5 rounded-full text-sm sm:text-base">
                 {totalPoints.toFixed(0)} pts
               </span>
             </div>
 
             {/* Team members table */}
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm text-center table-fixed">
+              <table className="w-full border-collapse text-xs sm:text-sm text-center">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th rowSpan={2} className="p-2 border w-1/4 text-center">
+                    <th rowSpan={2} className="p-2 border w-1/4">
                       Name
                     </th>
                     <th className="p-2 border w-1/6">Walk</th>
@@ -107,7 +107,7 @@ export function TeamPerformance() {
                       Points
                     </th>
                   </tr>
-                  <tr className="bg-gray-100 text-xs text-gray-600">
+                  <tr className="bg-gray-100 text-[10px] sm:text-xs text-gray-600">
                     <th className="p-1 border">5 pts/km</th>
                     <th className="p-1 border">10 pts/km</th>
                     <th className="p-1 border">15 pts/km</th>
@@ -120,16 +120,19 @@ export function TeamPerformance() {
                     const cycle = m.cycle_km ?? m.cycle ?? 0;
                     const points = m.points ?? 0;
 
+                    // ✅ Show only first name
+                    const firstName = m.name?.split(" ")[0] ?? "";
+
                     return (
                       <tr
                         key={m.name + i}
                         className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}
                       >
-                        <td className="p-2 border text-center">{m.name}</td>
-                        <td className="p-2 border">{walk.toFixed(1)}</td>
-                        <td className="p-2 border">{cycle.toFixed(1)}</td>
-                        <td className="p-2 border">{run.toFixed(1)}</td>
-                        <td className="p-2 border font-bold">
+                        <td className="p-1 sm:p-2 border text-center">{firstName}</td>
+                        <td className="p-1 sm:p-2 border">{walk.toFixed(1)}</td>
+                        <td className="p-1 sm:p-2 border">{cycle.toFixed(1)}</td>
+                        <td className="p-1 sm:p-2 border">{run.toFixed(1)}</td>
+                        <td className="p-1 sm:p-2 border font-semibold">
                           {points.toFixed(0)}
                         </td>
                       </tr>
