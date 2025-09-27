@@ -99,16 +99,16 @@ export function Activities() {
   return (
     <div className="p-4 space-y-6 text-white relative">
       {/* Floating refresh button */}
-      <button
-        onClick={handleRefresh}
-        disabled={refreshing}
-        className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-blue-900 shadow-lg flex items-center justify-center hover:bg-blue-800 disabled:opacity-50 z-50"
-      >
-        <RefreshCcw
-          size={24}
-          className={refreshing ? "animate-spin text-white" : "text-white"}
-        />
-      </button>
+<button
+  onClick={handleRefresh}
+  disabled={refreshing}
+  className="fixed bottom-32 right-6 w-14 h-14 rounded-full bg-blue-900 shadow-lg flex items-center justify-center hover:bg-blue-800 disabled:opacity-50 z-50"
+>
+  <RefreshCcw
+    size={24}
+    className={refreshing ? "animate-spin text-white" : "text-white"}
+  />
+</button>
 
       {/* Week navigation */}
       <div className="flex flex-col items-center gap-3">
