@@ -10,10 +10,13 @@ export async function GET(req: Request) {
     const state = searchParams.get("state"); // state = user_id
 
     if (!code || !state) {
-      return NextResponse.json({ error: "Missing code or state" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing code or state" },
+        { status: 400 }
+      );
     }
 
-    // ✅ Exchange Strava code for access token
+    // ✅ Exchange Strava code for access/refresh tokens
     const tokenRes = await fetch("https://www.strava.com/oauth/token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -26,16 +29,18 @@ export async function GET(req: Request) {
     });
 
     if (!tokenRes.ok) {
-      throw new Error("Failed to exchange code for Strava token");
+      const errText = await tokenRes.text();
+      throw new Error(
+        `Failed to exchange code for Strava token: ${tokenRes.status} ${errText}`
+      );
     }
 
     const tokenData = await tokenRes.json();
-    const access_token = tokenData.access_token;
+    const { access_token, refresh_token, expires_at } = tokenData;
 
-    // ✅ Fetch Strava activities
+    // ✅ Fetch initial Strava activities
     const activities = await fetchStravaActivities(access_token);
 
-    // ✅ Insert/Update activities in Supabase
     if (activities.length > 0) {
       const { error } = await supabaseAdmin.from("activities").upsert(
         activities.map((a) => ({
@@ -54,10 +59,15 @@ export async function GET(req: Request) {
       if (error) throw error;
     }
 
-    // ✅ Mark profile as strava_connected
+    // ✅ Save tokens & mark as connected
     await supabaseAdmin
       .from("profiles")
-      .update({ strava_connected: true })
+      .update({
+        strava_connected: true,
+        strava_access_token: access_token,
+        strava_refresh_token: refresh_token,
+        strava_token_expires_at: expires_at,
+      })
       .eq("user_id", state);
 
     // ✅ Persist session cookie

@@ -8,6 +8,7 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
+  RefreshCcw,
 } from "lucide-react";
 
 type Act = {
@@ -23,9 +24,8 @@ type Act = {
 
 const ALLOWED_TYPES = new Set(["Run", "TrailRun", "Walk", "Ride", "VirtualRide"]);
 
-// ✅ Map of team logos
 const teamLogos: Record<string, string> = {
-"THE POWERHOUSE": "/logos/powerhouse.png",
+  "THE POWERHOUSE": "/logos/powerhouse.png",
   "Corporate Crusaders": "/logos/crusaders.png",
   "RAC ROCKERS": "/logos/rockers.png",
   "ALPHA SQUAD": "/logos/alpha.png",
@@ -39,32 +39,49 @@ export function Activities() {
   const [activities, setActivities] = useState<Act[]>([]);
   const [weeksOrder, setWeeksOrder] = useState<string[]>([]);
   const [currentWeekIndex, setCurrentWeekIndex] = useState<number>(0);
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function fetchActivities() {
+    try {
+      const r = await fetch("/api/activities");
+      const data: Act[] = await r.json();
+      const filtered = (Array.isArray(data) ? data : [])
+        .filter((a) => ALLOWED_TYPES.has(a.type))
+        .map((a) => ({ ...a, distance: Number(a.distance || 0) }))
+        .sort(
+          (x, y) =>
+            new Date(x.start_date).getTime() - new Date(y.start_date).getTime()
+        );
+
+      setActivities(filtered);
+
+      const grouped = groupByWeek(filtered);
+      const keys = Object.keys(grouped).sort(
+        (a, b) => grouped[a].start - grouped[b].start
+      );
+      setWeeksOrder(keys);
+      setCurrentWeekIndex(Math.max(0, keys.length - 1));
+    } catch (err) {
+      console.error("Failed to load activities", err);
+    }
+  }
 
   useEffect(() => {
-    fetch("/api/activities")
-      .then((r) => r.json())
-      .then((data: Act[]) => {
-        const filtered = (Array.isArray(data) ? data : [])
-          .filter((a) => ALLOWED_TYPES.has(a.type))
-          .map((a) => ({ ...a, distance: Number(a.distance || 0) }))
-          .sort(
-            (x, y) =>
-              new Date(x.start_date).getTime() - new Date(y.start_date).getTime()
-          );
-
-        setActivities(filtered);
-
-        const grouped = groupByWeek(filtered);
-        const keys = Object.keys(grouped).sort(
-          (a, b) => grouped[a].start - grouped[b].start
-        );
-        setWeeksOrder(keys);
-        setCurrentWeekIndex(Math.max(0, keys.length - 1));
-      })
-      .catch((err) => {
-        console.error("Failed to load activities", err);
-      });
+    fetchActivities();
   }, []);
+
+  async function handleRefresh() {
+    try {
+      setRefreshing(true);
+      const res = await fetch("/api/strava/refresh", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to refresh activities");
+      await fetchActivities();
+    } catch (err) {
+      console.error("Refresh failed", err);
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   const grouped = useMemo(() => groupByWeek(activities), [activities]);
 
@@ -80,7 +97,19 @@ export function Activities() {
   const totals = computeWeekTotals(days);
 
   return (
-    <div className="p-4 space-y-6 text-white">
+    <div className="p-4 space-y-6 text-white relative">
+      {/* Floating refresh button */}
+      <button
+        onClick={handleRefresh}
+        disabled={refreshing}
+        className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-blue-900 shadow-lg flex items-center justify-center hover:bg-blue-800 disabled:opacity-50 z-50"
+      >
+        <RefreshCcw
+          size={24}
+          className={refreshing ? "animate-spin text-white" : "text-white"}
+        />
+      </button>
+
       {/* Week navigation */}
       <div className="flex flex-col items-center gap-3">
         <div className="flex items-center gap-4">
@@ -125,11 +154,7 @@ export function Activities() {
 
       {/* Activities by day */}
       {Object.entries(days)
-        // ✅ Sort days newest → oldest
-        .sort(
-          ([d1], [d2]) =>
-            new Date(d2).getTime() - new Date(d1).getTime()
-        )
+        .sort(([d1], [d2]) => new Date(d2).getTime() - new Date(d1).getTime())
         .map(([dateLabel, acts]) => (
           <div key={dateLabel} className="space-y-3">
             <div className="flex justify-between items-center">
@@ -142,7 +167,6 @@ export function Activities() {
             <div className="space-y-3">
               {acts
                 .slice()
-                // ✅ Sort activities newest → oldest
                 .sort(
                   (a, b) =>
                     new Date(b.start_date).getTime() -
@@ -169,7 +193,6 @@ export function Activities() {
                         </div>
 
                         <div className="flex items-center gap-3">
-                          {/* ✅ Team logo bigger + aligned left */}
                           {a.profiles?.team && (
                             <img
                               src={
