@@ -6,12 +6,17 @@ export async function POST() {
     // 1. Get all connected users with Strava tokens
     const { data: profiles, error: fetchError } = await supabase
       .from("profiles")
-      .select("user_id, strava_access_token, strava_refresh_token, strava_token_expires_at");
+      .select(
+        "user_id, strava_access_token, strava_refresh_token, strava_token_expires_at"
+      );
 
     if (fetchError) throw fetchError;
 
     if (!profiles || profiles.length === 0) {
-      return NextResponse.json({ error: "No connected users" }, { status: 400 });
+      return NextResponse.json(
+        { error: "No connected users" },
+        { status: 400 }
+      );
     }
 
     let refreshedUsers = 0;
@@ -23,7 +28,11 @@ export async function POST() {
 
       // 2. Refresh if token is missing or expired
       const now = Math.floor(Date.now() / 1000);
-      if (!accessToken || (profile.strava_token_expires_at && profile.strava_token_expires_at < now)) {
+      if (
+        !accessToken ||
+        (profile.strava_token_expires_at &&
+          profile.strava_token_expires_at < now)
+      ) {
         const tokenRes = await fetch("https://www.strava.com/oauth/token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -56,7 +65,7 @@ export async function POST() {
 
         accessToken = tokenData.access_token;
 
-        // Save tokens & expiry in DB (using your actual column names ✅)
+        // Save tokens & expiry in DB
         await supabase
           .from("profiles")
           .update({
@@ -90,7 +99,7 @@ export async function POST() {
       const activities = await activitiesRes.json();
 
       if (Array.isArray(activities)) {
-        // 4. Upsert activities into Supabase
+        // 4. Format activities
         const formatted = activities.map((a: any) => ({
           user_id: profile.user_id,
           strava_id: a.id,
@@ -102,6 +111,25 @@ export async function POST() {
           strava_url: `https://www.strava.com/activities/${a.id}`,
         }));
 
+        const stravaIds = formatted.map((a) => a.strava_id);
+
+        // 5. Delete activities in Supabase that no longer exist in Strava
+        if (stravaIds.length > 0) {
+          const { error: deleteError } = await supabase
+            .from("activities")
+            .delete()
+            .eq("user_id", profile.user_id)
+            .not("strava_id", "in", `(${stravaIds.join(",")})`);
+
+          if (deleteError) {
+            console.error(
+              `Delete error for user ${profile.user_id}:`,
+              deleteError
+            );
+          }
+        }
+
+        // 6. Upsert current activities
         const { error: insertError } = await supabase
           .from("activities")
           .upsert(formatted, { onConflict: "strava_id" });
@@ -117,6 +145,9 @@ export async function POST() {
     return NextResponse.json({ success: true, refreshedUsers });
   } catch (err) {
     console.error("Manual refresh error:", err);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Server error" },
+      { status: 500 }
+    );
   }
 }
