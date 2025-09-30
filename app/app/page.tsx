@@ -6,7 +6,8 @@ import { Activities } from "@/components/Activities";
 import Leaderboard from "@/components/Leaderboard";
 import { TeamPerformance } from "@/components/TeamPerformance";
 import { Header } from "@/components/Header";
-import { Home, Trophy, Users } from "lucide-react";
+import { Home, Trophy, Users, BarChart3 } from "lucide-react";
+import StatsPage from "./stats/page"; // ✅ import stats page
 
 export default function AppPage() {
   const [activeTab, setActiveTab] = useState("activities");
@@ -80,12 +81,13 @@ export default function AppPage() {
         {activeTab === "activities" && <Activities />}
         {activeTab === "leaderboard" && <Leaderboard />}
         {activeTab === "teams" && <TeamPerformance />}
+        {activeTab === "stats" && <StatsPage />}
       </div>
 
       {/* Bottom navigation pill */}
       <nav
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 flex w-[90%] max-w-2xl 
-        bg-pink-700 rounded-full shadow-lg px-10 py-4 justify-around items-center z-50"
+        className="fixed bottom-6 left-1/2 -translate-x-1/2 flex w-[95%] max-w-2xl 
+        bg-pink-700 rounded-full shadow-lg px-8 py-4 justify-around items-center z-50"
       >
         <button
           onClick={() => setActiveTab("activities")}
@@ -124,6 +126,19 @@ export default function AppPage() {
             className={activeTab === "teams" ? "text-white" : "text-gray-200"}
           />
           <span>Teams</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("stats")}
+          className={`flex flex-col items-center text-sm ${
+            activeTab === "stats" ? "text-white font-bold" : "text-gray-200"
+          }`}
+        >
+          <BarChart3
+            size={26}
+            className={activeTab === "stats" ? "text-white" : "text-gray-200"}
+          />
+          <span>Stats</span>
         </button>
       </nav>
     </div>

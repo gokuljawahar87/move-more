@@ -2,10 +2,15 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+// Fixed challenge start (1 Oct 2025, midnight IST)
+const challengeStart = new Date("2025-10-01T00:00:00+05:30");
+
 export async function GET() {
   try {
+    const now = new Date();
+
     // ✅ Fetch all profiles with their activities
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from("profiles")
       .select(
         `
@@ -23,6 +28,13 @@ export async function GET() {
         )
       `
       );
+
+    // ✅ Apply cutoff only if we're past challenge start
+    if (now >= challengeStart) {
+      query = query.gte("activities.start_date", challengeStart.toISOString());
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("❌ Supabase error:", error);
@@ -63,15 +75,15 @@ export async function GET() {
 
           if (a.type === "Run" || a.type === "TrailRun") {
             run += km;
-            points += km * 15; // ✅ Run points
+            points += km * 15;
           }
           if (a.type === "Walk") {
             walk += km;
-            points += km * 5; // ✅ Walk points
+            points += km * 5;
           }
           if (a.type === "Ride" || a.type === "VirtualRide") {
             cycle += km;
-            points += km * 10; // ✅ Cycle points
+            points += km * 10;
           }
         });
       }

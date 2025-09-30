@@ -2,10 +2,15 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+// Fixed challenge start (1 Oct 2025, midnight IST)
+const challengeStart = new Date("2025-10-01T00:00:00+05:30");
+
 export async function GET() {
   try {
-    // 1. Fetch activities with profiles joined
-    const { data: activities, error } = await supabaseAdmin
+    const now = new Date();
+
+    // 1. Build base query
+    let query = supabaseAdmin
       .from("activities")
       .select(
         `
@@ -13,6 +18,7 @@ export async function GET() {
         user_id,
         type,
         distance,
+        start_date,
         profiles (
           first_name,
           last_name,
@@ -20,6 +26,13 @@ export async function GET() {
         )
       `
       );
+
+    // ✅ Apply cutoff only if we're past challenge start
+    if (now >= challengeStart) {
+      query = query.gte("start_date", challengeStart.toISOString());
+    }
+
+    const { data: activities, error } = await query;
 
     if (error) {
       console.error("Error fetching leaderboard data:", error);
@@ -74,17 +87,17 @@ export async function GET() {
     const runners = Object.values(userTotals)
       .filter((u) => u.run > 0)
       .sort((a, b) => b.run - a.run)
-      .slice(0, 3); // ✅ top 3 runners
+      .slice(0, 3);
 
     const walkers = Object.values(userTotals)
       .filter((u) => u.walk > 0)
       .sort((a, b) => b.walk - a.walk)
-      .slice(0, 3); // ✅ top 3 walkers
+      .slice(0, 3);
 
     const cyclers = Object.values(userTotals)
       .filter((u) => u.cycle > 0)
       .sort((a, b) => b.cycle - a.cycle)
-      .slice(0, 3); // ✅ top 3 cyclers
+      .slice(0, 3);
 
     // 4. Aggregate by teams
     const teamTotals: Record<string, { team: string; points: number }> = {};
@@ -96,7 +109,7 @@ export async function GET() {
 
     const teams = Object.values(teamTotals)
       .sort((a, b) => b.points - a.points)
-      .slice(0, 3); // ✅ top 3 teams
+      .slice(0, 3);
 
     return NextResponse.json({ runners, walkers, cyclers, teams });
   } catch (err: any) {

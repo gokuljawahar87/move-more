@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
 
+// Fixed challenge start (1 Oct 2025, midnight IST)
+const challengeStart = new Date("2025-10-01T00:00:00+05:30");
+const challengeStartEpoch = Math.floor(challengeStart.getTime() / 1000);
+
 export async function POST() {
   try {
     // 1. Get all connected users with Strava tokens
@@ -78,9 +82,9 @@ export async function POST() {
 
       if (!accessToken) continue;
 
-      // 3. Fetch recent activities from Strava
+      // 3. Fetch only activities after challenge start (1 Oct 2025)
       const activitiesRes = await fetch(
-        "https://www.strava.com/api/v3/athlete/activities?per_page=50",
+        `https://www.strava.com/api/v3/athlete/activities?per_page=50&after=${challengeStartEpoch}`,
         {
           headers: { Authorization: `Bearer ${accessToken}` },
         }
@@ -111,25 +115,7 @@ export async function POST() {
           strava_url: `https://www.strava.com/activities/${a.id}`,
         }));
 
-        const stravaIds = formatted.map((a) => a.strava_id);
-
-        // 5. Delete activities in Supabase that no longer exist in Strava
-        if (stravaIds.length > 0) {
-          const { error: deleteError } = await supabase
-            .from("activities")
-            .delete()
-            .eq("user_id", profile.user_id)
-            .not("strava_id", "in", `(${stravaIds.join(",")})`);
-
-          if (deleteError) {
-            console.error(
-              `Delete error for user ${profile.user_id}:`,
-              deleteError
-            );
-          }
-        }
-
-        // 6. Upsert current activities
+        // 5. Upsert (no delete, we only care about challenge data)
         const { error: insertError } = await supabase
           .from("activities")
           .upsert(formatted, { onConflict: "strava_id" });
@@ -141,6 +127,12 @@ export async function POST() {
         }
       }
     }
+
+    // ✅ 6. Update sync_metadata timestamp
+    await supabase.from("sync_metadata").upsert({
+      id: 1,
+      last_refreshed_at: new Date().toISOString(),
+    });
 
     return NextResponse.json({ success: true, refreshedUsers });
   } catch (err) {

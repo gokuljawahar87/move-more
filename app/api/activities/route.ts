@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-// GET /api/activities → returns all activities with user info
+// Fixed challenge start (1 Oct 2025, midnight IST)
+const challengeStart = new Date("2025-10-01T00:00:00+05:30");
+
 export async function GET() {
   try {
+    const now = new Date();
+
     // join activities with profiles to get user names
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from("activities")
       .select(
         `
@@ -25,6 +29,13 @@ export async function GET() {
       `
       )
       .order("start_date", { ascending: false });
+
+    // ✅ Apply cutoff only if we're past challenge start
+    if (now >= challengeStart) {
+      query = query.gte("start_date", challengeStart.toISOString());
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("Error fetching activities:", error);
