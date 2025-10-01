@@ -20,9 +20,11 @@ type Act = {
   start_date: string;
   strava_url?: string;
   profiles?: { first_name?: string; last_name?: string; team?: string };
+  reactions?: { like?: number; love?: number; fire?: number };
 };
 
 const ALLOWED_TYPES = new Set(["Run", "TrailRun", "Walk", "Ride", "VirtualRide"]);
+const challengeStart = new Date("2025-10-01T00:00:00+05:30");
 
 const teamLogos: Record<string, string> = {
   "THE POWERHOUSE": "/logos/powerhouse.png",
@@ -44,7 +46,14 @@ export function Activities() {
   async function fetchActivities() {
     try {
       const r = await fetch("/api/activities");
-      const data: Act[] = await r.json();
+      let data: Act[] = await r.json();
+
+      // ✅ Only apply cutoff after 1 Oct 2025
+      const now = new Date();
+      if (now >= challengeStart) {
+        data = data.filter((a) => new Date(a.start_date) >= challengeStart);
+      }
+
       const filtered = (Array.isArray(data) ? data : [])
         .filter((a) => ALLOWED_TYPES.has(a.type))
         .map((a) => ({ ...a, distance: Number(a.distance || 0) }))
@@ -52,6 +61,28 @@ export function Activities() {
           (x, y) =>
             new Date(x.start_date).getTime() - new Date(y.start_date).getTime()
         );
+
+      // Fetch reactions for all activities
+const ids = filtered.map((a) => a.id);
+if (ids.length > 0) {
+  const res = await fetch("/api/reactions");
+  const reactions = await res.json();
+
+  // ✅ Safeguard: ensure it's an array
+  const reactionArray = Array.isArray(reactions) ? reactions : [];
+
+  // Map reactions by activity_id
+  const reactionMap: Record<string, { like: number; love: number; fire: number }> = {};
+  reactionArray.forEach((r: any) => {
+    if (!reactionMap[r.activity_id])
+      reactionMap[r.activity_id] = { like: 0, love: 0, fire: 0 };
+    reactionMap[r.activity_id][r.reaction_type] = r.count;
+  });
+
+  filtered.forEach((a) => {
+    a.reactions = reactionMap[a.id] || { like: 0, love: 0, fire: 0 };
+  });
+}
 
       setActivities(filtered);
 
@@ -75,13 +106,44 @@ export function Activities() {
       setRefreshing(true);
       const res = await fetch("/api/strava/refresh", { method: "POST" });
       if (!res.ok) throw new Error("Failed to refresh activities");
+
       await fetchActivities();
+
+      // ✅ Update sync_metadata timestamp
+      await fetch("/api/sync/update-timestamp", { method: "POST" });
     } catch (err) {
       console.error("Refresh failed", err);
     } finally {
       setRefreshing(false);
     }
   }
+
+  async function handleReaction(activityId: string | number, type: "like" | "love" | "fire") {
+  try {
+    // get user_id from localStorage (already stored when user registered/logged in)
+    const userId = localStorage.getItem("user_id");
+
+    if (!userId) {
+      console.error("No user_id found in localStorage");
+      return;
+    }
+
+    const res = await fetch("/api/reactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        activity_id: activityId, 
+        reaction_type: type, 
+        user_id: userId    // ✅ pass along
+      }),
+    });
+
+    if (!res.ok) throw new Error("Failed to react");
+    await fetchActivities(); // refresh counts
+  } catch (err) {
+    console.error("Reaction failed", err);
+  }
+}
 
   const grouped = useMemo(() => groupByWeek(activities), [activities]);
 
@@ -98,14 +160,16 @@ export function Activities() {
 
   return (
     <div className="p-4 space-y-6 text-white relative">
-      {/* Floating refresh button */}
+      {/* Floating blue refresh button */}
 <button
   onClick={handleRefresh}
   disabled={refreshing}
-  className="fixed bottom-32 right-6 w-14 h-14 rounded-full bg-blue-900 shadow-lg flex items-center justify-center hover:bg-blue-800 disabled:opacity-50 z-50"
+  className="fixed bottom-40 right-6 w-14 h-14 rounded-full bg-blue-600 shadow-xl flex items-center justify-center 
+             hover:bg-blue-500 active:scale-95 transition-all disabled:opacity-50 z-[9999] animate-bounce"
+  aria-label="Refresh activities"
 >
   <RefreshCcw
-    size={24}
+    size={28}
     className={refreshing ? "animate-spin text-white" : "text-white"}
   />
 </button>
@@ -175,60 +239,78 @@ export function Activities() {
                 .map((a) => (
                   <div
                     key={String(a.id)}
-                    className="bg-white text-gray-900 p-4 rounded-xl shadow flex items-start gap-4"
+                    className="bg-white text-gray-900 p-4 rounded-xl shadow flex flex-col gap-3"
                   >
-                    <div className="flex-shrink-0 mt-1">
-                      {getActivityIcon(a.type)}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold text-gray-900">
-                            {a.profiles?.first_name ?? ""}{" "}
-                            {a.profiles?.last_name ?? ""}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {new Date(a.start_date).toLocaleString()}
-                          </p>
-                        </div>
+                    {/* User info + link */}
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">
+                          {a.profiles?.first_name ?? ""}{" "}
+                          {a.profiles?.last_name ?? ""}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(a.start_date).toLocaleString()}
+                        </p>
+                      </div>
 
-                        <div className="flex items-center gap-3">
-                          {a.profiles?.team && (
-                            <img
-                              src={
-                                teamLogos[a.profiles.team] ||
-                                "/logos/default.png"
-                              }
-                              alt={a.profiles.team}
-                              className="w-12 h-12 rounded-full object-cover border-2 border-gray-300 mr-2"
-                            />
-                          )}
-                          <a
-                            href={
-                              a.strava_url ??
-                              `https://www.strava.com/activities/${a.id}`
+                      <div className="flex items-center gap-3">
+                        {a.profiles?.team && (
+                          <img
+                            src={
+                              teamLogos[a.profiles.team] ||
+                              "/logos/default.png"
                             }
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-orange-500 hover:text-orange-600"
-                          >
-                            <ExternalLink size={20} />
-                          </a>
-                        </div>
+                            alt={a.profiles.team}
+                            className="w-12 h-12 rounded-full object-cover border-2 border-gray-300"
+                          />
+                        )}
+                        <a
+                          href={
+                            a.strava_url ??
+                            `https://www.strava.com/activities/${a.id}`
+                          }
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-orange-500 hover:text-orange-600"
+                        >
+                          <ExternalLink size={20} />
+                        </a>
                       </div>
-                      <p className="text-md font-bold text-gray-800 mt-2">
-                        {a.name}
-                      </p>
-                      <div className="flex gap-4 text-sm text-gray-700 mt-2">
-                        <span className="font-medium">{a.type}</span>
-                        <span>
-                          {(Number(a.distance || 0) / 1000).toFixed(1)} km
-                        </span>
-                        <span>
-                          {Math.floor((a.moving_time || 0) / 60)}m{" "}
-                          {Math.floor((a.moving_time || 0) % 60)}s
-                        </span>
-                      </div>
+                    </div>
+
+                    {/* Activity name + details */}
+                    <p className="text-md font-bold text-gray-800">
+                      {a.name}
+                    </p>
+                    <div className="flex gap-4 text-sm text-gray-700 mt-1">
+                      <span className="font-medium">{a.type}</span>
+                      <span>{(Number(a.distance || 0) / 1000).toFixed(1)} km</span>
+                      <span>
+                        {Math.floor((a.moving_time || 0) / 60)}m{" "}
+                        {Math.floor((a.moving_time || 0) % 60)}s
+                      </span>
+                    </div>
+
+                    {/* ✅ Reactions */}
+                    <div className="flex gap-6 mt-3 text-gray-600 text-sm">
+                      <button
+                        onClick={() => handleReaction(a.id, "like")}
+                        className="flex items-center gap-1 hover:text-blue-600"
+                      >
+                        👍 <span>{a.reactions?.like || 0}</span>
+                      </button>
+                      <button
+                        onClick={() => handleReaction(a.id, "love")}
+                        className="flex items-center gap-1 hover:text-red-500"
+                      >
+                        ❤️ <span>{a.reactions?.love || 0}</span>
+                      </button>
+                      <button
+                        onClick={() => handleReaction(a.id, "fire")}
+                        className="flex items-center gap-1 hover:text-orange-500"
+                      >
+                        🔥 <span>{a.reactions?.fire || 0}</span>
+                      </button>
                     </div>
                   </div>
                 ))}
