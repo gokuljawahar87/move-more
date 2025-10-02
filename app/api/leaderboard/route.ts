@@ -9,29 +9,29 @@ export async function GET() {
   try {
     const now = new Date();
 
-// 1. Build base query
-let query = supabaseAdmin
-  .from("activities")
-  .select(
-    `
-    id,
-    user_id,
-    type,
-    distance,
-    start_date,
-    profiles (
-      first_name,
-      last_name,
-      team
-    )
-  `
-  )
-  .eq("is_valid", true);   // ✅ only valid activities
+    // 1. Build base query
+    let query = supabaseAdmin
+      .from("activities")
+      .select(
+        `
+        id,
+        user_id,
+        type,
+        distance,
+        start_date,
+        profiles (
+          first_name,
+          last_name,
+          team
+        )
+      `
+      )
+      .eq("is_valid", true); // ✅ only valid activities
 
-// ✅ Apply cutoff only if we're past challenge start
-if (now >= challengeStart) {
-  query = query.gte("start_date", challengeStart.toISOString());
-}
+    // ✅ Apply cutoff only if we're past challenge start
+    if (now >= challengeStart) {
+      query = query.gte("start_date", challengeStart.toISOString());
+    }
 
     const { data: activities, error } = await query;
 
@@ -45,7 +45,6 @@ if (now >= challengeStart) {
         runners: [],
         walkers: [],
         cyclers: [],
-        teams: [],
       });
     }
 
@@ -58,7 +57,6 @@ if (now >= challengeStart) {
         run: number;
         walk: number;
         cycle: number;
-        points: number;
       }
     > = {};
 
@@ -69,18 +67,15 @@ if (now >= challengeStart) {
       const team = profile?.team ?? null;
 
       if (!userTotals[act.user_id]) {
-        userTotals[act.user_id] = { name, team, run: 0, walk: 0, cycle: 0, points: 0 };
+        userTotals[act.user_id] = { name, team, run: 0, walk: 0, cycle: 0 };
       }
 
       if (act.type === "Run" || act.type === "TrailRun") {
         userTotals[act.user_id].run += km;
-        userTotals[act.user_id].points += km * 15;
       } else if (act.type === "Walk") {
         userTotals[act.user_id].walk += km;
-        userTotals[act.user_id].points += km * 5;
       } else if (act.type === "Ride" || act.type === "VirtualRide") {
         userTotals[act.user_id].cycle += km;
-        userTotals[act.user_id].points += km * 10;
       }
     }
 
@@ -100,19 +95,7 @@ if (now >= challengeStart) {
       .sort((a, b) => b.cycle - a.cycle)
       .slice(0, 3);
 
-    // 4. Aggregate by teams
-    const teamTotals: Record<string, { team: string; points: number }> = {};
-    for (const u of Object.values(userTotals)) {
-      if (!u.team) continue;
-      if (!teamTotals[u.team]) teamTotals[u.team] = { team: u.team, points: 0 };
-      teamTotals[u.team].points += u.points;
-    }
-
-    const teams = Object.values(teamTotals)
-      .sort((a, b) => b.points - a.points)
-      .slice(0, 3);
-
-    return NextResponse.json({ runners, walkers, cyclers, teams });
+    return NextResponse.json({ runners, walkers, cyclers });
   } catch (err: any) {
     console.error("Unexpected error in /api/leaderboard:", err);
     return NextResponse.json(
