@@ -9,28 +9,29 @@ export async function GET() {
   try {
     const now = new Date();
 
-    // 1. Build base query
-    let query = supabaseAdmin
-      .from("activities")
-      .select(
-        `
-        id,
-        user_id,
-        type,
-        distance,
-        start_date,
-        profiles (
-          first_name,
-          last_name,
-          team
-        )
-      `
-      );
+// 1. Build base query
+let query = supabaseAdmin
+  .from("activities")
+  .select(
+    `
+    id,
+    user_id,
+    type,
+    distance,
+    start_date,
+    profiles (
+      first_name,
+      last_name,
+      team
+    )
+  `
+  )
+  .eq("is_valid", true);   // ✅ only valid activities
 
-    // ✅ Apply cutoff only if we're past challenge start
-    if (now >= challengeStart) {
-      query = query.gte("start_date", challengeStart.toISOString());
-    }
+// ✅ Apply cutoff only if we're past challenge start
+if (now >= challengeStart) {
+  query = query.gte("start_date", challengeStart.toISOString());
+}
 
     const { data: activities, error } = await query;
 

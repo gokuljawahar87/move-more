@@ -27,7 +27,8 @@ export async function GET() {
           start_date
         )
       `
-      );
+      )
+.eq("activities.is_valid", true);   // ✅ filter only valid activities
 
     // ✅ Apply cutoff only if we're past challenge start
     if (now >= challengeStart) {

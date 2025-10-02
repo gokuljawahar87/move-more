@@ -28,6 +28,7 @@ export async function GET() {
         )
       `
       )
+      .eq("is_valid", true)   // ✅ filter only valid
       .order("start_date", { ascending: false });
 
     // ✅ Apply cutoff only if we're past challenge start

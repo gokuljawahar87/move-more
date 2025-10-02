@@ -29,8 +29,10 @@ export default function StatsPage() {
 
       // 1. Build query
       let query = supabase
-        .from("activities")
-        .select("type, distance, start_date");
+  .from("activities")
+  .select("type, distance, start_date")
+  .eq("is_valid", true);   // ✅ only valid activities
+
 
       // ✅ Only apply cutoff after 1 Oct 2025 midnight IST
       if (now >= challengeStart) {
