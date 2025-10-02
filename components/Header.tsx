@@ -31,7 +31,7 @@ export function Header() {
   const handleConnectStrava = () => {
     if (!profile?.user_id) return;
     // ✅ Redirect user to Strava auth flow with their user_id
-    window.location.href = `/api/strava/auth?user_id=${profile.user_id}`;
+    window.location.href = `/api/strava/connect?user_id=${profile.user_id}`;
   };
 
   return (
