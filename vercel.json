@@ -6,11 +6,7 @@
     },
     {
       "path": "/api/strava/refresh",
-      "schedule": "30 10 * * *"
-    },
-    {
-      "path": "/api/strava/refresh",
-      "schedule": "30 16 * * *"
+      "schedule": "30 13 * * *"
     }
   ]
 }
