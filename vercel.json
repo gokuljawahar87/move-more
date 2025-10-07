@@ -2,15 +2,15 @@
   "crons": [
     {
       "path": "/api/strava/refresh",
-      "schedule": "0 3 * * *"     // 9 AM IST
+      "schedule": "0 3 * * *"
     },
     {
       "path": "/api/strava/refresh",
-      "schedule": "30 10 * * *"   // 4 PM IST
+      "schedule": "30 10 * * *"
     },
     {
       "path": "/api/strava/refresh",
-      "schedule": "30 16 * * *"   // 10 PM IST
+      "schedule": "30 16 * * *"
     }
   ]
 }
