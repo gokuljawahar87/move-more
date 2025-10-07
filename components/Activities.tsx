@@ -42,6 +42,7 @@ export function Activities() {
   const [weeksOrder, setWeeksOrder] = useState<string[]>([]);
   const [currentWeekIndex, setCurrentWeekIndex] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   async function fetchActivities() {
     try {
@@ -62,27 +63,27 @@ export function Activities() {
             new Date(x.start_date).getTime() - new Date(y.start_date).getTime()
         );
 
-      // Fetch reactions for all activities
-const ids = filtered.map((a) => a.id);
-if (ids.length > 0) {
-  const res = await fetch("/api/reactions");
-  const reactions = await res.json();
+      // ✅ Fetch reactions for all activities
+      const ids = filtered.map((a) => a.id);
+      if (ids.length > 0) {
+        const res = await fetch("/api/reactions");
+        const reactions = await res.json();
 
-  // ✅ Safeguard: ensure it's an array
-  const reactionArray = Array.isArray(reactions) ? reactions : [];
+        const reactionArray = Array.isArray(reactions) ? reactions : [];
+        const reactionMap: Record<
+          string,
+          { like: number; love: number; fire: number }
+        > = {};
+        reactionArray.forEach((r: any) => {
+          if (!reactionMap[r.activity_id])
+            reactionMap[r.activity_id] = { like: 0, love: 0, fire: 0 };
+          reactionMap[r.activity_id][r.reaction_type] = r.count;
+        });
 
-  // Map reactions by activity_id
-  const reactionMap: Record<string, { like: number; love: number; fire: number }> = {};
-  reactionArray.forEach((r: any) => {
-    if (!reactionMap[r.activity_id])
-      reactionMap[r.activity_id] = { like: 0, love: 0, fire: 0 };
-    reactionMap[r.activity_id][r.reaction_type] = r.count;
-  });
-
-  filtered.forEach((a) => {
-    a.reactions = reactionMap[a.id] || { like: 0, love: 0, fire: 0 };
-  });
-}
+        filtered.forEach((a) => {
+          a.reactions = reactionMap[a.id] || { like: 0, love: 0, fire: 0 };
+        });
+      }
 
       setActivities(filtered);
 
@@ -104,8 +105,32 @@ if (ids.length > 0) {
   async function handleRefresh() {
     try {
       setRefreshing(true);
-      const res = await fetch("/api/strava/refresh", { method: "POST" });
-      if (!res.ok) throw new Error("Failed to refresh activities");
+      const user_id = localStorage.getItem("user_id");
+      if (!user_id) {
+        setToast("⚠️ User not logged in.");
+        return;
+      }
+
+      const res = await fetch("/api/strava/refresh-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id }),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        console.error("Manual refresh failed:", result);
+        setToast("❌ Failed to refresh activities.");
+        return;
+      }
+
+      if (result.skipped) {
+        setToast("ℹ️ No new or updated activities.");
+      } else {
+        const msg = `✅ ${result.refreshed || 0} updated, ${result.deleted || 0} deleted.`;
+        setToast(msg);
+      }
 
       await fetchActivities();
 
@@ -113,37 +138,34 @@ if (ids.length > 0) {
       await fetch("/api/sync/update-timestamp", { method: "POST" });
     } catch (err) {
       console.error("Refresh failed", err);
+      setToast("❌ Refresh failed. Try again later.");
     } finally {
       setRefreshing(false);
+      // hide toast after few seconds
+      setTimeout(() => setToast(null), 4000);
     }
   }
 
-  async function handleReaction(activityId: string | number, type: "like" | "love" | "fire") {
-  try {
-    // get user_id from localStorage (already stored when user registered/logged in)
-    const userId = localStorage.getItem("user_id");
+  async function handleReaction(
+    activityId: string | number,
+    type: "like" | "love" | "fire"
+  ) {
+    try {
+      const userId = localStorage.getItem("user_id");
+      if (!userId) return console.error("No user_id found in localStorage");
 
-    if (!userId) {
-      console.error("No user_id found in localStorage");
-      return;
+      const res = await fetch("/api/reactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activity_id: activityId, reaction_type: type, user_id: userId }),
+      });
+
+      if (!res.ok) throw new Error("Failed to react");
+      await fetchActivities();
+    } catch (err) {
+      console.error("Reaction failed", err);
     }
-
-    const res = await fetch("/api/reactions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        activity_id: activityId, 
-        reaction_type: type, 
-        user_id: userId    // ✅ pass along
-      }),
-    });
-
-    if (!res.ok) throw new Error("Failed to react");
-    await fetchActivities(); // refresh counts
-  } catch (err) {
-    console.error("Reaction failed", err);
   }
-}
 
   const grouped = useMemo(() => groupByWeek(activities), [activities]);
 
@@ -160,19 +182,26 @@ if (ids.length > 0) {
 
   return (
     <div className="p-4 space-y-6 text-white relative">
-      {/* Floating blue refresh button */}
-<button
-  onClick={handleRefresh}
-  disabled={refreshing}
-  className="fixed bottom-40 right-6 w-14 h-14 rounded-full bg-blue-600 shadow-xl flex items-center justify-center 
-             hover:bg-blue-500 active:scale-95 transition-all disabled:opacity-50 z-[9999] animate-bounce"
-  aria-label="Refresh activities"
->
-  <RefreshCcw
-    size={28}
-    className={refreshing ? "animate-spin text-white" : "text-white"}
-  />
-</button>
+      {/* ✅ Floating blue refresh button */}
+      <button
+        onClick={handleRefresh}
+        disabled={refreshing}
+        className="fixed bottom-40 right-6 w-14 h-14 rounded-full bg-blue-600 shadow-xl flex items-center justify-center 
+                   hover:bg-blue-500 active:scale-95 transition-all disabled:opacity-50 z-[9999] animate-bounce"
+        aria-label="Refresh activities"
+      >
+        <RefreshCcw
+          size={28}
+          className={refreshing ? "animate-spin text-white" : "text-white"}
+        />
+      </button>
+
+      {/* ✅ Toast message */}
+      {toast && (
+        <div className="fixed bottom-24 right-6 bg-gray-900 text-white px-4 py-2 rounded-xl shadow-lg text-sm animate-fadeIn z-[10000]">
+          {toast}
+        </div>
+      )}
 
       {/* Week navigation */}
       <div className="flex flex-col items-center gap-3">
@@ -279,12 +308,12 @@ if (ids.length > 0) {
                     </div>
 
                     {/* Activity name + details */}
-                    <p className="text-md font-bold text-gray-800">
-                      {a.name}
-                    </p>
+                    <p className="text-md font-bold text-gray-800">{a.name}</p>
                     <div className="flex gap-4 text-sm text-gray-700 mt-1">
                       <span className="font-medium">{a.type}</span>
-                      <span>{(Number(a.distance || 0) / 1000).toFixed(1)} km</span>
+                      <span>
+                        {(Number(a.distance || 0) / 1000).toFixed(1)} km
+                      </span>
                       <span>
                         {Math.floor((a.moving_time || 0) / 60)}m{" "}
                         {Math.floor((a.moving_time || 0) % 60)}s
@@ -322,30 +351,12 @@ if (ids.length > 0) {
 }
 
 /* Helpers */
-function getActivityIcon(type: string) {
-  switch (type) {
-    case "Run":
-    case "TrailRun":
-      return <Footprints className="text-red-500" size={24} />;
-    case "Ride":
-    case "VirtualRide":
-      return <Bike className="text-green-500" size={24} />;
-    case "Walk":
-      return <ActivityIcon className="text-blue-600" size={24} />;
-    default:
-      return <ActivityIcon size={24} />;
-  }
-}
-
 function groupByWeek(activities: Act[]) {
   const map: Record<
     string,
     { label: string; start: number; days: Record<string, Act[]> }
   > = {};
-  const dateFmt = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+  const dateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 
   activities.forEach((a) => {
     const d = new Date(a.start_date);
@@ -379,9 +390,9 @@ function groupByWeek(activities: Act[]) {
 }
 
 function computeWeekTotals(days: Record<string, Act[]>) {
-  let run = 0;
-  let walk = 0;
-  let cycle = 0;
+  let run = 0,
+    walk = 0,
+    cycle = 0;
 
   Object.values(days).forEach((acts) => {
     acts.forEach((a) => {

@@ -1,3 +1,4 @@
+// app/api/strava/refresh/route.ts
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -7,7 +8,6 @@ const challengeStartEpoch = Math.floor(challengeStart.getTime() / 1000);
 
 export async function POST() {
   try {
-    // 1. Get all connected users with Strava tokens
     const { data: profiles, error: fetchError } = await supabase
       .from("profiles")
       .select(
@@ -15,12 +15,8 @@ export async function POST() {
       );
 
     if (fetchError) throw fetchError;
-
     if (!profiles || profiles.length === 0) {
-      return NextResponse.json(
-        { error: "No connected users" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "No connected users" }, { status: 400 });
     }
 
     let refreshedUsers = 0;
@@ -30,7 +26,7 @@ export async function POST() {
 
       let accessToken = profile.strava_access_token;
 
-      // 2. Refresh if token is missing or expired
+      // ✅ Refresh token if expired
       const now = Math.floor(Date.now() / 1000);
       if (
         !accessToken ||
@@ -49,62 +45,75 @@ export async function POST() {
         });
 
         if (!tokenRes.ok) {
-          const errTxt = await tokenRes.text();
           console.error(
-            `Token refresh failed for user ${profile.user_id}:`,
-            tokenRes.status,
-            errTxt
+            `Token refresh failed for user ${profile.user_id}: ${tokenRes.status}`
           );
           continue;
         }
 
         const tokenData = await tokenRes.json();
-        if (tokenData.errors) {
-          console.error(
-            `Token refresh failed for user ${profile.user_id}:`,
-            tokenData.errors
-          );
-          continue;
-        }
-
         accessToken = tokenData.access_token;
 
-        // Save tokens & expiry in DB
         await supabase
           .from("profiles")
           .update({
             strava_access_token: tokenData.access_token,
             strava_refresh_token: tokenData.refresh_token,
-            strava_token_expires_at: tokenData.expires_at, // Unix timestamp
+            strava_token_expires_at: tokenData.expires_at,
           })
           .eq("user_id", profile.user_id);
       }
 
       if (!accessToken) continue;
 
-      // 3. Fetch only activities after challenge start (1 Oct 2025)
-      const activitiesRes = await fetch(
-        `https://www.strava.com/api/v3/athlete/activities?per_page=50&after=${challengeStartEpoch}`,
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
-      );
+      // ✅ Get last synced activity
+      const { data: lastActivity } = await supabase
+        .from("activities")
+        .select("start_date")
+        .eq("user_id", profile.user_id)
+        .order("start_date", { ascending: false })
+        .limit(1)
+        .single();
 
-      if (!activitiesRes.ok) {
-        const errTxt = await activitiesRes.text();
-        console.error(
-          `Activities fetch failed for user ${profile.user_id}:`,
-          activitiesRes.status,
-          errTxt
-        );
-        continue;
+      const afterEpoch = lastActivity
+        ? Math.floor(new Date(lastActivity.start_date).getTime() / 1000)
+        : challengeStartEpoch;
+
+      // ✅ Fetch with pagination
+      let page = 1;
+      let allActivities: any[] = [];
+      let keepFetching = true;
+
+      while (keepFetching) {
+        const url = `https://www.strava.com/api/v3/athlete/activities?after=${afterEpoch}&per_page=50&page=${page}`;
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        if (!res.ok) {
+          console.error(
+            `Activities fetch failed for user ${profile.user_id}: ${res.status}`
+          );
+          break;
+        }
+
+        const batch = await res.json();
+
+        if (Array.isArray(batch) && batch.length > 0) {
+          allActivities.push(...batch);
+          page++;
+        } else {
+          keepFetching = false; // ✅ no more activities
+        }
       }
 
-      const activities = await activitiesRes.json();
+      if (allActivities.length > 0) {
+        // ✅ Filter out manually added activities (no GPS)
+        const filtered = allActivities.filter((a: any) => !a.manual);
 
-      if (Array.isArray(activities)) {
-        // 4. Format activities
-        const formatted = activities.map((a: any) => ({
+        if (filtered.length === 0) continue; // no valid activities
+
+        const formatted = filtered.map((a: any) => ({
           user_id: profile.user_id,
           strava_id: a.id,
           name: a.name,
@@ -113,9 +122,9 @@ export async function POST() {
           moving_time: a.moving_time,
           start_date: a.start_date,
           strava_url: `https://www.strava.com/activities/${a.id}`,
+          is_valid: true,
         }));
 
-        // 5. Upsert (no delete, we only care about challenge data)
         const { error: insertError } = await supabase
           .from("activities")
           .upsert(formatted, { onConflict: "strava_id" });
@@ -128,7 +137,7 @@ export async function POST() {
       }
     }
 
-    // ✅ 6. Update sync_metadata timestamp
+    // ✅ Update sync metadata
     await supabase.from("sync_metadata").upsert({
       id: 1,
       last_refreshed_at: new Date().toISOString(),
@@ -137,9 +146,6 @@ export async function POST() {
     return NextResponse.json({ success: true, refreshedUsers });
   } catch (err) {
     console.error("Manual refresh error:", err);
-    return NextResponse.json(
-      { error: "Server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

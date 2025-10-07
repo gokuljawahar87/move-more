@@ -1,8 +1,16 @@
 {
   "crons": [
     {
-      "path": "/api/cron/nightly-refresh",
-      "schedule": "30 18 * * *"
+      "path": "/api/strava/refresh",
+      "schedule": "0 3 * * *"     // 9 AM IST
+    },
+    {
+      "path": "/api/strava/refresh",
+      "schedule": "30 10 * * *"   // 4 PM IST
+    },
+    {
+      "path": "/api/strava/refresh",
+      "schedule": "30 16 * * *"   // 10 PM IST
     }
   ]
 }
