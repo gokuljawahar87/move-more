@@ -1,4 +1,3 @@
-// app/api/leaderboard/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -36,7 +35,7 @@ export async function GET() {
     const { data: activities, error } = await query;
 
     if (error) {
-      console.error("Error fetching leaderboard data:", error);
+      console.error("❌ Error fetching leaderboard data:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
@@ -45,6 +44,7 @@ export async function GET() {
         runners: [],
         walkers: [],
         cyclers: [],
+        teams: [],
       });
     }
 
@@ -57,6 +57,7 @@ export async function GET() {
         run: number;
         walk: number;
         cycle: number;
+        points: number;
       }
     > = {};
 
@@ -67,15 +68,19 @@ export async function GET() {
       const team = profile?.team ?? null;
 
       if (!userTotals[act.user_id]) {
-        userTotals[act.user_id] = { name, team, run: 0, walk: 0, cycle: 0 };
+        userTotals[act.user_id] = { name, team, run: 0, walk: 0, cycle: 0, points: 0 };
       }
 
+      // 🧮 Updated points calculation
       if (act.type === "Run" || act.type === "TrailRun") {
         userTotals[act.user_id].run += km;
+        userTotals[act.user_id].points += km * 15; // 🏃 Running = 15 pts/km
       } else if (act.type === "Walk") {
         userTotals[act.user_id].walk += km;
+        userTotals[act.user_id].points += km * 14; // 🚶 Walking = 14 pts/km
       } else if (act.type === "Ride" || act.type === "VirtualRide") {
         userTotals[act.user_id].cycle += km;
+        userTotals[act.user_id].points += km * 6; // 🚴 Cycling = 6 pts/km
       }
     }
 
@@ -95,9 +100,22 @@ export async function GET() {
       .sort((a, b) => b.cycle - a.cycle)
       .slice(0, 3);
 
-    return NextResponse.json({ runners, walkers, cyclers });
+    // 4. Aggregate by teams
+    const teamTotals: Record<string, { team: string; points: number }> = {};
+    for (const u of Object.values(userTotals)) {
+      if (!u.team) continue;
+      if (!teamTotals[u.team]) teamTotals[u.team] = { team: u.team, points: 0 };
+      teamTotals[u.team].points += u.points;
+    }
+
+    const teams = Object.values(teamTotals)
+      .sort((a, b) => b.points - a.points)
+      .slice(0, 3);
+
+    // ✅ Final JSON response
+    return NextResponse.json({ runners, walkers, cyclers, teams });
   } catch (err: any) {
-    console.error("Unexpected error in /api/leaderboard:", err);
+    console.error("❌ Unexpected error in /api/leaderboard:", err);
     return NextResponse.json(
       { error: err.message || "Failed to fetch leaderboard" },
       { status: 500 }

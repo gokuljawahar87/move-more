@@ -1,4 +1,3 @@
-// app/api/team-performance/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -28,7 +27,7 @@ export async function GET() {
         )
       `
       )
-.eq("activities.is_valid", true);   // ✅ filter only valid activities
+      .eq("activities.is_valid", true); // ✅ only valid activities
 
     // ✅ Apply cutoff only if we're past challenge start
     if (now >= challengeStart) {
@@ -74,17 +73,18 @@ export async function GET() {
         profile.activities.forEach((a: any) => {
           const km = Number(a.distance || 0) / 1000;
 
+          // 🧮 Updated points system
           if (a.type === "Run" || a.type === "TrailRun") {
             run += km;
-            points += km * 15;
+            points += km * 15; // 🏃 Running = 15 pts/km
           }
           if (a.type === "Walk") {
             walk += km;
-            points += km * 5;
+            points += km * 14; // 🚶 Walking = 14 pts/km
           }
           if (a.type === "Ride" || a.type === "VirtualRide") {
             cycle += km;
-            points += km * 10;
+            points += km * 6; // 🚴 Cycling = 6 pts/km
           }
         });
       }
@@ -109,8 +109,8 @@ export async function GET() {
       teamMap[profile.team].totalPoints += points;
     }
 
-    // ✅ Convert to array
-    const teams = Object.values(teamMap);
+    // ✅ Convert to array for response
+    const teams = Object.values(teamMap).sort((a, b) => b.totalPoints - a.totalPoints);
 
     return NextResponse.json(teams);
   } catch (err: any) {
