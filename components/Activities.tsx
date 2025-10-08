@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity as ActivityIcon,
@@ -196,14 +195,49 @@ export function Activities() {
         />
       </button>
 
+      {/* 🟧 Master refresh button (only for user_id = U262861) */}
+      {typeof window !== "undefined" &&
+        localStorage.getItem("user_id") === "U262861" && (
+          <button
+            onClick={async () => {
+              try {
+                setRefreshing(true);
+                const res = await fetch("/api/strava/refresh", { method: "POST" });
+                const data = await res.json();
+                if (res.ok) {
+                  setToast("✅ All users refreshed successfully!");
+                  await fetchActivities();
+                } else {
+                  setToast(`❌ Failed: ${data.error || "Unknown error"}`);
+                }
+              } catch (err) {
+                console.error(err);
+                setToast("❌ Error during master refresh.");
+              } finally {
+                setRefreshing(false);
+                setTimeout(() => setToast(null), 4000);
+              }
+            }}
+            disabled={refreshing}
+            className="fixed bottom-24 right-6 w-10 h-10 rounded-full bg-orange-500 shadow-lg flex items-center justify-center 
+                       hover:bg-orange-400 active:scale-95 transition-all disabled:opacity-50 z-[9999]"
+            aria-label="Master refresh"
+          >
+            <RefreshCcw
+              size={20}
+              className={refreshing ? "animate-spin text-white" : "text-white"}
+            />
+          </button>
+        )}
+
       {/* ✅ Toast message */}
       {toast && (
-        <div className="fixed bottom-24 right-6 bg-gray-900 text-white px-4 py-2 rounded-xl shadow-lg text-sm animate-fadeIn z-[10000]">
+        <div className="fixed bottom-10 right-6 bg-gray-900 text-white px-4 py-2 rounded-xl shadow-lg text-sm animate-fadeIn z-[10000]">
           {toast}
         </div>
       )}
 
-      {/* Week navigation */}
+      {/* Week navigation and activities list unchanged */}
       <div className="flex flex-col items-center gap-3">
         <div className="flex items-center gap-4">
           <button
@@ -245,7 +279,6 @@ export function Activities() {
         </div>
       </div>
 
-      {/* Activities by day */}
       {Object.entries(days)
         .sort(([d1], [d2]) => new Date(d2).getTime() - new Date(d1).getTime())
         .map(([dateLabel, acts]) => (
@@ -256,7 +289,6 @@ export function Activities() {
                 {acts.length} activities
               </span>
             </div>
-
             <div className="space-y-3">
               {acts
                 .slice()
@@ -307,7 +339,6 @@ export function Activities() {
                       </div>
                     </div>
 
-                    {/* Activity name + details */}
                     <p className="text-md font-bold text-gray-800">{a.name}</p>
                     <div className="flex gap-4 text-sm text-gray-700 mt-1">
                       <span className="font-medium">{a.type}</span>
@@ -356,7 +387,10 @@ function groupByWeek(activities: Act[]) {
     string,
     { label: string; start: number; days: Record<string, Act[]> }
   > = {};
-  const dateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+  const dateFmt = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  });
 
   activities.forEach((a) => {
     const d = new Date(a.start_date);

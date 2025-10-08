@@ -22,13 +22,24 @@ export default function DashboardPage() {
         setProfile(data);
         setLoading(false);
 
-        // 🚀 if already connected to Strava, go straight to /app
+        // 🚀 If already connected to Strava, go straight to /app
         if (data?.strava_id) {
           router.push("/app");
         }
       })
       .catch(() => setLoading(false));
   }, [router]);
+
+  const handleConnectToStrava = () => {
+    const userId = localStorage.getItem("user_id");
+    if (!userId) {
+      alert("User ID missing — please re-register or refresh.");
+      return;
+    }
+
+    // ✅ Append user_id to Strava connect URL
+    window.location.href = `/api/strava/connect?user_id=${encodeURIComponent(userId)}`;
+  };
 
   if (loading) {
     return (
@@ -55,12 +66,12 @@ export default function DashboardPage() {
         <p className="mb-4">Team: {profile.team ?? "Not Assigned"}</p>
 
         {!profile.strava_id ? (
-          <a
-            href="/api/strava/connect"
+          <button
+            onClick={handleConnectToStrava}
             className="inline-block px-6 py-2 bg-orange-500 hover:bg-orange-600 rounded-lg font-medium"
           >
             Connect to Strava
-          </a>
+          </button>
         ) : (
           <p className="text-green-400 font-semibold">
             Strava already connected ✓ Redirecting...
