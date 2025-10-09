@@ -109,7 +109,12 @@ export async function GET() {
       teamMap[profile.team].totalPoints += points;
     }
 
-    // ✅ Convert to array for response
+    // ✅ Sort members inside each team by points (DESC)
+    Object.values(teamMap).forEach((team) => {
+      team.members.sort((a, b) => b.points - a.points);
+    });
+
+    // ✅ Sort teams by total points (DESC)
     const teams = Object.values(teamMap).sort((a, b) => b.totalPoints - a.totalPoints);
 
     return NextResponse.json(teams);
