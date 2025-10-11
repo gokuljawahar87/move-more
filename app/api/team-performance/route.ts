@@ -4,11 +4,13 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 // Fixed challenge start (1 Oct 2025, midnight IST)
 const challengeStart = new Date("2025-10-01T00:00:00+05:30");
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const now = new Date();
+    const { searchParams } = new URL(request.url);
+    const selectedDate = searchParams.get("date"); // ✅ from frontend
 
-    // ✅ Fetch all profiles with their activities
+    // ✅ Base query: fetch all profiles with activities
     let query = supabaseAdmin
       .from("profiles")
       .select(
@@ -29,9 +31,16 @@ export async function GET() {
       )
       .eq("activities.is_valid", true); // ✅ only valid activities
 
-    // ✅ Apply cutoff only if we're past challenge start
+    // ✅ Apply challenge start cutoff
     if (now >= challengeStart) {
       query = query.gte("activities.start_date", challengeStart.toISOString());
+    }
+
+    // ✅ Apply daily filter if date is selected
+    if (selectedDate) {
+      const start = new Date(`${selectedDate}T00:00:00+05:30`).toISOString();
+      const end = new Date(`${selectedDate}T23:59:59+05:30`).toISOString();
+      query = query.gte("activities.start_date", start).lte("activities.start_date", end);
     }
 
     const { data, error } = await query;
@@ -42,8 +51,8 @@ export async function GET() {
     }
 
     if (!data || data.length === 0) {
-      return NextResponse.json([]);
-    }
+  return NextResponse.json({ message: "No activities found for this day", teams: [] });
+}
 
     // ✅ Group by team
     const teamMap: Record<
@@ -109,13 +118,15 @@ export async function GET() {
       teamMap[profile.team].totalPoints += points;
     }
 
-    // ✅ Sort members inside each team by points (DESC)
+    // ✅ Sort members within each team by points (DESC)
     Object.values(teamMap).forEach((team) => {
       team.members.sort((a, b) => b.points - a.points);
     });
 
     // ✅ Sort teams by total points (DESC)
-    const teams = Object.values(teamMap).sort((a, b) => b.totalPoints - a.totalPoints);
+    const teams = Object.values(teamMap).sort(
+      (a, b) => b.totalPoints - a.totalPoints
+    );
 
     return NextResponse.json(teams);
   } catch (err: any) {

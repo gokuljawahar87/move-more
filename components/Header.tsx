@@ -30,48 +30,76 @@ export function Header() {
 
   const handleConnectStrava = () => {
     if (!profile?.user_id) return;
-    // ✅ Redirect user to Strava auth flow with their user_id
     window.location.href = `/api/strava/connect?user_id=${profile.user_id}`;
   };
 
   return (
-    <header className="flex items-center justify-between px-4 py-3 bg-blue-900 text-white shadow-md fixed top-0 left-0 right-0 z-40">
-      {/* App title */}
-      <div className="flex items-center gap-2">
-        <img src="/logo.png" alt="App Logo" className="w-8 h-8 rounded" />
-        <h1 className="text-lg font-semibold">AAP – Move-Athon-Mania</h1>
-      </div>
+    <>
+      {/* 🔷 Top Header */}
+      <header className="flex items-center justify-between px-4 py-3 bg-blue-900 text-white shadow-md fixed top-0 left-0 right-0 z-40">
+        <div className="flex items-center gap-2">
+          <img src="/logo.png" alt="App Logo" className="w-8 h-8 rounded" />
+          <h1 className="text-lg font-semibold">AAP – Move-Athon-Mania</h1>
+        </div>
 
-      {/* User initials circle + popup */}
-      <div className="relative">
-        <button
-          onClick={() => setMenuOpen((prev) => !prev)}
-          className="w-10 h-10 flex items-center justify-center rounded-full bg-white text-black font-bold shadow"
-        >
-          {initials || "?"}
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setMenuOpen((prev) => !prev)}
+            className="w-10 h-10 flex items-center justify-center rounded-full bg-white text-black font-bold shadow"
+          >
+            {initials || "?"}
+          </button>
 
-        {menuOpen && (
-          <div className="absolute right-0 mt-2 w-56 bg-white text-black rounded-lg shadow-lg p-4 z-50">
-            <p className="font-semibold mb-2">
-              {profile?.first_name} {profile?.last_name}
-            </p>
-
-            {profile?.strava_connected ? (
-              <p className="text-green-600 font-medium">
-                ✅ Connected to Strava
+          {menuOpen && (
+            <div className="absolute right-0 mt-2 w-56 bg-white text-black rounded-lg shadow-lg p-4 z-50">
+              <p className="font-semibold mb-2">
+                {profile?.first_name} {profile?.last_name}
               </p>
-            ) : (
-              <button
-                onClick={handleConnectStrava}
-                className="block w-full text-center bg-pink-600 text-white px-3 py-2 rounded-lg hover:bg-pink-700"
-              >
-                Connect to Strava
-              </button>
-            )}
-          </div>
-        )}
+
+              {profile?.strava_connected ? (
+                <p className="text-green-600 font-medium">
+                  ✅ Connected to Strava
+                </p>
+              ) : (
+                <button
+                  onClick={handleConnectStrava}
+                  className="block w-full text-center bg-pink-600 text-white px-3 py-2 rounded-lg hover:bg-pink-700"
+                >
+                  Connect to Strava
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* 🟧 Scrolling Announcement Bar */}
+      <div className="fixed top-[56px] left-0 right-0 bg-orange-500 text-white text-sm font-medium h-[32px] flex items-center justify-center overflow-hidden z-30 shadow-md">
+        <div className="animate-marquee whitespace-nowrap hover:[animation-play-state:paused] text-center">
+          🏁 Event closes on <strong>Nov 14th</strong> — Keep Moving, Stay Active! 🚴‍♂️🏃‍♀️🚶‍♂️
+        </div>
       </div>
-    </header>
+
+      {/* 🧩 Adjusted spacer to match new banner height */}
+      <div className="h-[35px]" />
+
+      {/* 🔁 Animation Styles */}
+      <style jsx>{`
+        @keyframes marquee {
+          0% {
+            transform: translateX(100%);
+          }
+          100% {
+            transform: translateX(-100%);
+          }
+        }
+
+        .animate-marquee {
+          display: inline-block;
+          animation: marquee 24s linear infinite;
+          padding-left: 100%;
+        }
+      `}</style>
+    </>
   );
 }
