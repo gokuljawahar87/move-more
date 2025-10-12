@@ -1,8 +1,7 @@
-// app/api/strava/refresh/route.ts
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
 
-// Fixed challenge start (1 Oct 2025, midnight IST)
+// Challenge start (1 Oct 2025 midnight IST)
 const challengeStart = new Date("2025-10-01T00:00:00+05:30");
 const challengeStartEpoch = Math.floor(challengeStart.getTime() / 1000);
 
@@ -15,9 +14,8 @@ export async function POST() {
       );
 
     if (fetchError) throw fetchError;
-    if (!profiles || profiles.length === 0) {
+    if (!profiles?.length)
       return NextResponse.json({ error: "No connected users" }, { status: 400 });
-    }
 
     let refreshedUsers = 0;
 
@@ -25,14 +23,10 @@ export async function POST() {
       if (!profile.strava_refresh_token) continue;
 
       let accessToken = profile.strava_access_token;
-
-      // ✅ Refresh token if expired
       const now = Math.floor(Date.now() / 1000);
-      if (
-        !accessToken ||
-        (profile.strava_token_expires_at &&
-          profile.strava_token_expires_at < now)
-      ) {
+
+      // 🔐 Refresh expired token
+      if (!accessToken || (profile.strava_token_expires_at ?? 0) < now) {
         const tokenRes = await fetch("https://www.strava.com/oauth/token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -45,9 +39,7 @@ export async function POST() {
         });
 
         if (!tokenRes.ok) {
-          console.error(
-            `Token refresh failed for user ${profile.user_id}: ${tokenRes.status}`
-          );
+          console.error(`Token refresh failed for ${profile.user_id}`);
           continue;
         }
 
@@ -66,34 +58,19 @@ export async function POST() {
 
       if (!accessToken) continue;
 
-      // ✅ Get last synced activity
-      const { data: lastActivity } = await supabase
-        .from("activities")
-        .select("start_date")
-        .eq("user_id", profile.user_id)
-        .order("start_date", { ascending: false })
-        .limit(1)
-        .single();
-
-      const afterEpoch = lastActivity
-        ? Math.floor(new Date(lastActivity.start_date).getTime() / 1000)
-        : challengeStartEpoch;
-
-      // ✅ Fetch with pagination
+      // 🕒 Always fetch all challenge-period activities
       let page = 1;
       let allActivities: any[] = [];
       let keepFetching = true;
 
       while (keepFetching) {
-        const url = `https://www.strava.com/api/v3/athlete/activities?after=${afterEpoch}&per_page=50&page=${page}`;
+        const url = `https://www.strava.com/api/v3/athlete/activities?after=${challengeStartEpoch}&per_page=100&page=${page}`;
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
 
         if (!res.ok) {
-          console.error(
-            `Activities fetch failed for user ${profile.user_id}: ${res.status}`
-          );
+          console.error(`Fetch failed for user ${profile.user_id}: ${res.status}`);
           break;
         }
 
@@ -103,41 +80,72 @@ export async function POST() {
           allActivities.push(...batch);
           page++;
         } else {
-          keepFetching = false; // ✅ no more activities
+          keepFetching = false;
         }
       }
 
       if (allActivities.length > 0) {
-        // ✅ Filter out manually added activities (no GPS)
-        const filtered = allActivities.filter((a: any) => !a.manual);
+        const filtered = allActivities.filter((a) => !a.manual);
 
-        if (filtered.length === 0) continue; // no valid activities
+        // 🧠 Step 1: Fetch existing validity flags
+        const { data: existingFlags, error: flagErr } = await supabase
+          .from("activities")
+          .select("strava_id, is_valid")
+          .eq("user_id", profile.user_id);
 
-        const formatted = filtered.map((a: any) => ({
+        const validMap =
+          !flagErr && existingFlags?.length
+            ? Object.fromEntries(
+                existingFlags.map((r) => [r.strava_id?.toString(), r.is_valid])
+              )
+            : {};
+
+        // 🧱 Step 2: Format and preserve validity
+        const formatted = filtered.map((a) => ({
           user_id: profile.user_id,
-          strava_id: a.id,
+          strava_id: a.id.toString(),
           name: a.name,
           type: a.type,
           distance: a.distance,
           moving_time: a.moving_time,
           start_date: a.start_date,
           strava_url: `https://www.strava.com/activities/${a.id}`,
-          is_valid: true,
+          is_valid: validMap[a.id.toString()] ?? true, // ✅ Preserve if exists
         }));
 
+        // 1️⃣ Upsert with preserved validity
         const { error: insertError } = await supabase
           .from("activities")
           .upsert(formatted, { onConflict: "strava_id" });
 
-        if (insertError) {
-          console.error("Insert error:", insertError);
-        } else {
-          refreshedUsers++;
+        if (insertError) console.error("Insert error:", insertError);
+        else refreshedUsers++;
+
+        // 2️⃣ Delete stale activities (removed from Strava)
+        const stravaIds = formatted.map((a) => a.strava_id);
+        const { data: existing, error: existingErr } = await supabase
+          .from("activities")
+          .select("strava_id")
+          .eq("user_id", profile.user_id);
+
+        if (!existingErr && existing?.length) {
+          const existingIds = existing.map((a) => a.strava_id?.toString());
+          const toDelete = existingIds.filter((id) => !stravaIds.includes(id));
+
+          if (toDelete.length > 0) {
+            console.log(`🗑 Deleting ${toDelete.length} old activities for ${profile.user_id}`);
+            const { error: delErr } = await supabase
+              .from("activities")
+              .delete()
+              .in("strava_id", toDelete);
+
+            if (delErr) console.error("❌ Delete error:", delErr);
+          }
         }
       }
     }
 
-    // ✅ Update sync metadata
+    // 🔁 Update metadata
     await supabase.from("sync_metadata").upsert({
       id: 1,
       last_refreshed_at: new Date().toISOString(),
@@ -145,7 +153,7 @@ export async function POST() {
 
     return NextResponse.json({ success: true, refreshedUsers });
   } catch (err) {
-    console.error("Manual refresh error:", err);
+    console.error("Critical refresh error:", err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
