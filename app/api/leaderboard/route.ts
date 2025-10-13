@@ -1,45 +1,44 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-// Fixed challenge start (1 Oct 2025, midnight IST)
+// Challenge start date (1 Oct 2025, midnight IST)
 const challengeStart = new Date("2025-10-01T00:00:00+05:30");
 
 export async function GET() {
   try {
     const now = new Date();
 
-    // 1. Build base query
+    // ✅ Base query: profiles → activities
     let query = supabaseAdmin
-      .from("activities")
-      .select(
-        `
-        id,
+      .from("profiles")
+      .select(`
         user_id,
-        type,
-        distance,
-        start_date,
-        profiles (
-          first_name,
-          last_name,
-          team
+        first_name,
+        last_name,
+        team,
+        activities (
+          id,
+          type,
+          distance,
+          start_date,
+          is_valid
         )
-      `
-      )
-      .eq("is_valid", true); // ✅ only valid activities
+      `)
+      .eq("activities.is_valid", true);
 
-    // ✅ Apply cutoff only if we're past challenge start
+    // ✅ Apply challenge start filter
     if (now >= challengeStart) {
-      query = query.gte("start_date", challengeStart.toISOString());
+      query = query.gte("activities.start_date", challengeStart.toISOString());
     }
 
-    const { data: activities, error } = await query;
+    const { data, error } = await query;
 
     if (error) {
-      console.error("❌ Error fetching leaderboard data:", error);
+      console.error("❌ Supabase error:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    if (!activities) {
+    if (!data || data.length === 0) {
       return NextResponse.json({
         runners: [],
         walkers: [],
@@ -48,7 +47,7 @@ export async function GET() {
       });
     }
 
-    // 2. Aggregate distances by user
+    // ✅ Calculate user totals
     const userTotals: Record<
       string,
       {
@@ -61,58 +60,64 @@ export async function GET() {
       }
     > = {};
 
-    for (const act of activities) {
-      const km = Number(act.distance || 0) / 1000;
-      const profile = Array.isArray(act.profiles) ? act.profiles[0] : act.profiles;
-      const name = `${profile?.first_name ?? ""} ${profile?.last_name ?? ""}`.trim();
-      const team = profile?.team ?? null;
+    for (const profile of data) {
+      if (!profile.activities?.length) continue;
 
-      if (!userTotals[act.user_id]) {
-        userTotals[act.user_id] = { name, team, run: 0, walk: 0, cycle: 0, points: 0 };
+      let run = 0,
+        walk = 0,
+        cycle = 0,
+        points = 0;
+
+      for (const a of profile.activities) {
+        const km = Number(a.distance || 0) / 1000;
+
+        if (a.type === "Run" || a.type === "TrailRun") {
+          run += km;
+          points += km * 15;
+        } else if (a.type === "Walk") {
+          walk += km;
+          points += km * 14;
+        } else if (a.type === "Ride" || a.type === "VirtualRide") {
+          cycle += km;
+          points += km * 6;
+        }
       }
 
-      // 🧮 Updated points calculation
-      if (act.type === "Run" || act.type === "TrailRun") {
-        userTotals[act.user_id].run += km;
-        userTotals[act.user_id].points += km * 15; // 🏃 Running = 15 pts/km
-      } else if (act.type === "Walk") {
-        userTotals[act.user_id].walk += km;
-        userTotals[act.user_id].points += km * 14; // 🚶 Walking = 14 pts/km
-      } else if (act.type === "Ride" || act.type === "VirtualRide") {
-        userTotals[act.user_id].cycle += km;
-        userTotals[act.user_id].points += km * 6; // 🚴 Cycling = 6 pts/km
-      }
+      const name = `${profile.first_name || ""} ${profile.last_name || ""}`.trim();
+      const team = profile.team ?? null;
+
+      userTotals[profile.user_id] = { name, team, run, walk, cycle, points };
     }
 
-    // 3. Prepare sorted leaderboards
-    const runners = Object.values(userTotals)
+    const users = Object.values(userTotals);
+
+    // ✅ Top 3 individuals per activity
+    const runners = users
       .filter((u) => u.run > 0)
       .sort((a, b) => b.run - a.run)
       .slice(0, 3);
 
-    const walkers = Object.values(userTotals)
+    const walkers = users
       .filter((u) => u.walk > 0)
       .sort((a, b) => b.walk - a.walk)
       .slice(0, 3);
 
-    const cyclers = Object.values(userTotals)
+    const cyclers = users
       .filter((u) => u.cycle > 0)
       .sort((a, b) => b.cycle - a.cycle)
       .slice(0, 3);
 
-    // 4. Aggregate by teams
+    // ✅ Team leaderboard (same formula as team-performance)
     const teamTotals: Record<string, { team: string; points: number }> = {};
-    for (const u of Object.values(userTotals)) {
+    for (const u of users) {
       if (!u.team) continue;
       if (!teamTotals[u.team]) teamTotals[u.team] = { team: u.team, points: 0 };
       teamTotals[u.team].points += u.points;
     }
 
-    const teams = Object.values(teamTotals)
-      .sort((a, b) => b.points - a.points)
-      .slice(0, 3);
+    const teams = Object.values(teamTotals).sort((a, b) => b.points - a.points).slice(0, 3);
 
-    // ✅ Final JSON response
+    // ✅ Final response
     return NextResponse.json({ runners, walkers, cyclers, teams });
   } catch (err: any) {
     console.error("❌ Unexpected error in /api/leaderboard:", err);
