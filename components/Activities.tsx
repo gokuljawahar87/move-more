@@ -1,28 +1,36 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Activity as ActivityIcon,
-  Bike,
-  Footprints,
   ExternalLink,
   ChevronLeft,
   ChevronRight,
   RefreshCcw,
+  Footprints,
+  Bike,
+  Activity as RunIcon,
 } from "lucide-react";
 
 type Act = {
   id: number | string;
   name: string;
   type: string;
+  derived_type?: string;
   distance: number;
   moving_time: number;
   start_date: string;
   strava_url?: string;
   profiles?: { first_name?: string; last_name?: string; team?: string };
-  reactions?: { like?: number; love?: number; fire?: number };
 };
 
-const ALLOWED_TYPES = new Set(["Run", "TrailRun", "Walk", "Ride", "VirtualRide"]);
+const ALLOWED_TYPES = new Set([
+  "Run",
+  "TrailRun",
+  "Walk",
+  "Ride",
+  "VirtualRide",
+  "Reclassified-Walk", // ✅ Include derived type
+]);
+
 const challengeStart = new Date("2025-10-01T00:00:00+05:30");
 
 const teamLogos: Record<string, string> = {
@@ -48,41 +56,22 @@ export function Activities() {
       const r = await fetch("/api/activities");
       let data: Act[] = await r.json();
 
-      // ✅ Only apply cutoff after 1 Oct 2025
       const now = new Date();
       if (now >= challengeStart) {
         data = data.filter((a) => new Date(a.start_date) >= challengeStart);
       }
 
       const filtered = (Array.isArray(data) ? data : [])
-        .filter((a) => ALLOWED_TYPES.has(a.type))
+        .filter(
+          (a) =>
+            ALLOWED_TYPES.has(a.type) ||
+            a.derived_type === "Reclassified-Walk" // ✅ Ensure reclassified included
+        )
         .map((a) => ({ ...a, distance: Number(a.distance || 0) }))
         .sort(
           (x, y) =>
             new Date(x.start_date).getTime() - new Date(y.start_date).getTime()
         );
-
-      // ✅ Fetch reactions for all activities
-      const ids = filtered.map((a) => a.id);
-      if (ids.length > 0) {
-        const res = await fetch("/api/reactions");
-        const reactions = await res.json();
-
-        const reactionArray = Array.isArray(reactions) ? reactions : [];
-        const reactionMap: Record<
-          string,
-          { like: number; love: number; fire: number }
-        > = {};
-        reactionArray.forEach((r: any) => {
-          if (!reactionMap[r.activity_id])
-            reactionMap[r.activity_id] = { like: 0, love: 0, fire: 0 };
-          reactionMap[r.activity_id][r.reaction_type] = r.count;
-        });
-
-        filtered.forEach((a) => {
-          a.reactions = reactionMap[a.id] || { like: 0, love: 0, fire: 0 };
-        });
-      }
 
       setActivities(filtered);
 
@@ -132,37 +121,13 @@ export function Activities() {
       }
 
       await fetchActivities();
-
-      // ✅ Update sync_metadata timestamp
       await fetch("/api/sync/update-timestamp", { method: "POST" });
     } catch (err) {
       console.error("Refresh failed", err);
       setToast("❌ Refresh failed. Try again later.");
     } finally {
       setRefreshing(false);
-      // hide toast after few seconds
       setTimeout(() => setToast(null), 4000);
-    }
-  }
-
-  async function handleReaction(
-    activityId: string | number,
-    type: "like" | "love" | "fire"
-  ) {
-    try {
-      const userId = localStorage.getItem("user_id");
-      if (!userId) return console.error("No user_id found in localStorage");
-
-      const res = await fetch("/api/reactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ activity_id: activityId, reaction_type: type, user_id: userId }),
-      });
-
-      if (!res.ok) throw new Error("Failed to react");
-      await fetchActivities();
-    } catch (err) {
-      console.error("Reaction failed", err);
     }
   }
 
@@ -179,9 +144,17 @@ export function Activities() {
   const days = weekData?.days || {};
   const totals = computeWeekTotals(days);
 
+  const getIcon = (type: string, size = 18) => {
+    if (type === "Ride" || type === "VirtualRide")
+      return <Bike size={size} className="text-blue-600" />;
+    if (type === "Walk" || type === "Reclassified-Walk")
+      return <Footprints size={size} className="text-green-600" />;
+    return <RunIcon size={size} className="text-orange-500" />;
+  };
+
   return (
     <div className="p-4 space-y-6 text-white relative">
-      {/* ✅ Floating blue refresh button */}
+      {/* ✅ Refresh button */}
       <button
         onClick={handleRefresh}
         disabled={refreshing}
@@ -195,7 +168,7 @@ export function Activities() {
         />
       </button>
 
-      {/* 🟧 Master refresh button (only for user_id = U262861) */}
+      {/* 🟧 Master refresh (Admin only) */}
       {typeof window !== "undefined" &&
         localStorage.getItem("user_id") === "U262861" && (
           <button
@@ -230,21 +203,19 @@ export function Activities() {
           </button>
         )}
 
-      {/* ✅ Toast message */}
       {toast && (
         <div className="fixed bottom-10 right-6 bg-gray-900 text-white px-4 py-2 rounded-xl shadow-lg text-sm animate-fadeIn z-[10000]">
           {toast}
         </div>
       )}
 
-      {/* Week navigation and activities list unchanged */}
+      {/* Weekly header + summary */}
       <div className="flex flex-col items-center gap-3">
         <div className="flex items-center gap-4">
           <button
             onClick={() => setCurrentWeekIndex((i) => Math.max(0, i - 1))}
             disabled={currentWeekIndex === 0}
             className="p-2 rounded-full bg-gray-700 disabled:opacity-40"
-            aria-label="Previous week"
           >
             <ChevronLeft size={20} />
           </button>
@@ -266,19 +237,17 @@ export function Activities() {
 
           <button
             onClick={() =>
-              setCurrentWeekIndex((i) =>
-                Math.min(weeksOrder.length - 1, i + 1)
-              )
+              setCurrentWeekIndex((i) => Math.min(weeksOrder.length - 1, i + 1))
             }
             disabled={currentWeekIndex === weeksOrder.length - 1}
             className="p-2 rounded-full bg-gray-700 disabled:opacity-40"
-            aria-label="Next week"
           >
             <ChevronRight size={20} />
           </button>
         </div>
       </div>
 
+      {/* Daily activity cards */}
       {Object.entries(days)
         .sort(([d1], [d2]) => new Date(d2).getTime() - new Date(d1).getTime())
         .map(([dateLabel, acts]) => (
@@ -289,91 +258,79 @@ export function Activities() {
                 {acts.length} activities
               </span>
             </div>
+
             <div className="space-y-3">
               {acts
                 .slice()
                 .sort(
                   (a, b) =>
-                    new Date(b.start_date).getTime() -
-                    new Date(a.start_date).getTime()
+                    new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
                 )
-                .map((a) => (
-                  <div
-                    key={String(a.id)}
-                    className="bg-white text-gray-900 p-4 rounded-xl shadow flex flex-col gap-3"
-                  >
-                    {/* User info + link */}
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-900">
-                          {a.profiles?.first_name ?? ""}{" "}
-                          {a.profiles?.last_name ?? ""}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {new Date(a.start_date).toLocaleString()}
-                        </p>
+                .map((a) => {
+                  const km = Number(a.distance || 0) / 1000;
+                  const pace = km > 0 ? ((a.moving_time / 60) / km).toFixed(1) : "–";
+                  const isReclassified =
+                    a?.derived_type?.toLowerCase() === "reclassified-walk";
+
+                  return (
+                    <div
+                      key={String(a.id)}
+                      className="bg-white text-gray-900 p-4 rounded-xl shadow flex flex-col gap-3"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">
+                            {a.profiles?.first_name ?? ""} {a.profiles?.last_name ?? ""}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(a.start_date).toLocaleString()}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          {a.profiles?.team && (
+                            <img
+                              src={teamLogos[a.profiles.team] || "/logos/default.png"}
+                              alt={a.profiles.team}
+                              className="w-12 h-12 rounded-full object-cover border-2 border-gray-300"
+                            />
+                          )}
+                          <a
+                            href={a.strava_url ?? `https://www.strava.com/activities/${a.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-orange-500 hover:text-orange-600"
+                          >
+                            <ExternalLink size={20} />
+                          </a>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-3">
-                        {a.profiles?.team && (
-                          <img
-                            src={
-                              teamLogos[a.profiles.team] ||
-                              "/logos/default.png"
-                            }
-                            alt={a.profiles.team}
-                            className="w-12 h-12 rounded-full object-cover border-2 border-gray-300"
-                          />
+                      <p className="text-md font-bold text-gray-800">{a.name}</p>
+
+                      <div className="flex gap-3 items-center text-sm text-gray-700 mt-1">
+                        {getIcon(isReclassified ? "Reclassified-Walk" : a.type)}
+                        <span className="font-medium">
+                          {isReclassified ? "Run → Walk" : a.type}
+                        </span>
+                        <span>{km.toFixed(1)} km</span>
+                        <span>{pace} min/km</span>
+                        <span>
+                          {Math.floor(a.moving_time / 60)}m {a.moving_time % 60}s
+                        </span>
+
+                        {isReclassified && (
+                          <span
+                            title="Pace ≥ 8.5 min/km — reclassified as walk"
+                            className="ml-2 px-2 py-0.5 text-xs rounded-full bg-orange-100 text-orange-700 font-medium"
+                          >
+                            Reclassified
+                          </span>
                         )}
-                        <a
-                          href={
-                            a.strava_url ??
-                            `https://www.strava.com/activities/${a.id}`
-                          }
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-orange-500 hover:text-orange-600"
-                        >
-                          <ExternalLink size={20} />
-                        </a>
                       </div>
                     </div>
-
-                    <p className="text-md font-bold text-gray-800">{a.name}</p>
-                    <div className="flex gap-4 text-sm text-gray-700 mt-1">
-                      <span className="font-medium">{a.type}</span>
-                      <span>
-                        {(Number(a.distance || 0) / 1000).toFixed(1)} km
-                      </span>
-                      <span>
-                        {Math.floor((a.moving_time || 0) / 60)}m{" "}
-                        {Math.floor((a.moving_time || 0) % 60)}s
-                      </span>
-                    </div>
-
-                    {/* ✅ Reactions */}
-                    <div className="flex gap-6 mt-3 text-gray-600 text-sm">
-                      <button
-                        onClick={() => handleReaction(a.id, "like")}
-                        className="flex items-center gap-1 hover:text-blue-600"
-                      >
-                        👍 <span>{a.reactions?.like || 0}</span>
-                      </button>
-                      <button
-                        onClick={() => handleReaction(a.id, "love")}
-                        className="flex items-center gap-1 hover:text-red-500"
-                      >
-                        ❤️ <span>{a.reactions?.love || 0}</span>
-                      </button>
-                      <button
-                        onClick={() => handleReaction(a.id, "fire")}
-                        className="flex items-center gap-1 hover:text-orange-500"
-                      >
-                        🔥 <span>{a.reactions?.fire || 0}</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           </div>
         ))}
@@ -387,10 +344,7 @@ function groupByWeek(activities: Act[]) {
     string,
     { label: string; start: number; days: Record<string, Act[]> }
   > = {};
-  const dateFmt = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+  const dateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 
   activities.forEach((a) => {
     const d = new Date(a.start_date);
@@ -432,7 +386,7 @@ function computeWeekTotals(days: Record<string, Act[]>) {
     acts.forEach((a) => {
       const km = Number(a.distance || 0) / 1000;
       if (a.type === "Run" || a.type === "TrailRun") run += km;
-      else if (a.type === "Walk") walk += km;
+      else if (a.type === "Walk" || a.derived_type === "Reclassified-Walk") walk += km;
       else if (a.type === "Ride" || a.type === "VirtualRide") cycle += km;
     });
   });

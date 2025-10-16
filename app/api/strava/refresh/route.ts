@@ -12,7 +12,9 @@ export async function POST() {
       .select("user_id, strava_access_token, strava_refresh_token, strava_token_expires_at");
 
     if (fetchError) throw fetchError;
-    if (!profiles?.length) return NextResponse.json({ error: "No connected users" }, { status: 400 });
+    if (!profiles?.length) {
+      return NextResponse.json({ error: "No connected users" }, { status: 400 });
+    }
 
     let refreshedUsers = 0;
     let cleanedUsers = 0;
@@ -34,6 +36,7 @@ export async function POST() {
             refresh_token: profile.strava_refresh_token,
           }),
         });
+
         if (!tokenRes.ok) continue;
 
         const tokenData = await tokenRes.json();
@@ -74,20 +77,27 @@ export async function POST() {
       // 📥 Fetch existing records for this user
       const { data: existing, error: existingError } = await supabase
         .from("activities")
-        .select("id, strava_id, is_valid")
+        .select("id, strava_id, is_valid, is_valid_locked, derived_type")
         .eq("user_id", profile.user_id);
 
       if (existingError) continue;
 
       const existingMap = new Map(
-        (existing || []).map((a) => [String(a.strava_id), a.is_valid])
+        (existing || []).map((a) => [
+          String(a.strava_id),
+          {
+            is_valid: a.is_valid,
+            is_valid_locked: a.is_valid_locked,
+            derived_type: a.derived_type,
+          },
+        ])
       );
 
       const stravaIds = new Set(freshStrava.map((a: any) => String(a.id)));
 
-      // ❌ Remove deleted Strava activities
+      // ❌ Remove deleted Strava activities (only unlocked)
       const deletedIds = (existing || [])
-        .filter((a) => !stravaIds.has(String(a.strava_id)))
+        .filter((a) => !stravaIds.has(String(a.strava_id)) && !a.is_valid_locked)
         .map((a) => a.strava_id);
 
       if (deletedIds.length) {
@@ -99,28 +109,49 @@ export async function POST() {
         cleanedUsers++;
       }
 
-      // 🧩 Prepare upserts (preserve manual FALSE always)
-      const formatted = freshStrava.map((a: any) => ({
-        user_id: profile.user_id,
-        strava_id: a.id,
-        name: a.name,
-        type: a.type,
-        distance: a.distance,
-        moving_time: a.moving_time,
-        start_date: a.start_date,
-        strava_url: `https://www.strava.com/activities/${a.id}`,
-        // 🚫 Never overwrite manual FALSE
-        is_valid: existingMap.has(String(a.id)) ? existingMap.get(String(a.id)) : true,
-      }));
+      // 🧩 Prepare upserts (preserve manual FALSE always + reclassification + lock protection)
+      const formatted: any[] = [];
 
-      // 🧷 First upsert without touching is_valid at all
-      const { error: upsertError } = await supabase
-        .from("activities")
-        .upsert(formatted, { onConflict: "strava_id" });
+      for (const a of freshStrava) {
+        const km = Number(a.distance || 0) / 1000;
+        const paceMinPerKm =
+          a.moving_time > 0 ? (a.moving_time / 60) / (a.distance / 1000 || 1) : 0;
 
-      if (upsertError) {
-        console.error(`❌ Upsert error for ${profile.user_id}:`, upsertError);
-        continue;
+        // ✅ Reclassification logic
+        let derivedType = a.type;
+        if ((a.type === "Run" || a.type === "TrailRun") && paceMinPerKm >= 8.5) {
+          derivedType = "Reclassified-Walk";
+        }
+
+        const existingRecord = existingMap.get(String(a.id));
+
+        // 🚫 Skip if locked
+        if (existingRecord?.is_valid_locked) continue;
+
+        formatted.push({
+          user_id: profile.user_id,
+          strava_id: a.id,
+          name: a.name,
+          type: a.type,
+          derived_type: existingRecord?.derived_type || derivedType,
+          distance: a.distance,
+          moving_time: a.moving_time,
+          start_date: a.start_date,
+          strava_url: `https://www.strava.com/activities/${a.id}`,
+          is_valid: existingRecord ? existingRecord.is_valid : true,
+          is_valid_locked: existingRecord?.is_valid_locked || false,
+        });
+      }
+
+      if (formatted.length > 0) {
+        const { error: upsertError } = await supabase
+          .from("activities")
+          .upsert(formatted, { onConflict: "strava_id" });
+
+        if (upsertError) {
+          console.error(`❌ Upsert error for ${profile.user_id}:`, upsertError);
+          continue;
+        }
       }
 
       refreshedUsers++;
