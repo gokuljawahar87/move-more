@@ -16,6 +16,7 @@ type LeaderboardData = {
   walkers: LeaderboardEntry[];
   cyclers: LeaderboardEntry[];
   teams: LeaderboardEntry[];
+  topFemales?: LeaderboardEntry[];
 };
 
 // ✅ Team logos map
@@ -36,6 +37,7 @@ export default function Leaderboard() {
     walkers: [],
     cyclers: [],
     teams: [],
+    topFemales: [],
   });
 
   useEffect(() => {
@@ -52,6 +54,15 @@ export default function Leaderboard() {
       <Section title="🏃 Top Runners" list={data.runners} metric="run" unit="km" />
       <Section title="🚶 Top Walkers" list={data.walkers} metric="walk" unit="km" />
       <Section title="🚴 Top Cyclers" list={data.cyclers} metric="cycle" unit="km" />
+
+      {/* 👩‍💼 New Diversity Section */}
+      <Section
+        title="👩‍💼 Top Diversity Candidate Performers"
+        list={data.topFemales || []}
+        metric="points"
+        unit="pts"
+      />
+
       <Section
         title="👥 Top Teams"
         list={data.teams}
