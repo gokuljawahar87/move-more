@@ -2,14 +2,20 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
 
+// Challenge start date
 const challengeStart = new Date("2025-10-01T00:00:00+05:30");
 const challengeStartEpoch = Math.floor(challengeStart.getTime() / 1000);
+
+// ⏳ Freeze cutoff date — do NOT touch activities before this date
+const refreshCutoff = new Date("2025-10-18T00:00:00+05:30");
 
 export async function POST() {
   try {
     const { data: profiles, error: fetchError } = await supabase
       .from("profiles")
-      .select("user_id, strava_access_token, strava_refresh_token, strava_token_expires_at");
+      .select(
+        "user_id, strava_access_token, strava_refresh_token, strava_token_expires_at"
+      );
 
     if (fetchError) throw fetchError;
     if (!profiles?.length) {
@@ -54,14 +60,16 @@ export async function POST() {
 
       if (!accessToken) continue;
 
-      // 🗂 Fetch all Strava activities
+      // 🗂 Fetch all Strava activities since challenge start
       let page = 1;
       let allActivities: any[] = [];
       let keepFetching = true;
 
       while (keepFetching) {
         const url = `https://www.strava.com/api/v3/athlete/activities?after=${challengeStartEpoch}&per_page=200&page=${page}`;
-        const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
         if (!res.ok) break;
 
         const batch = await res.json();
@@ -71,13 +79,25 @@ export async function POST() {
         } else keepFetching = false;
       }
 
-      // 🧹 Filter manual uploads
-      const freshStrava = allActivities.filter((a: any) => !a.manual);
+      // 🧹 Remove manual uploads
+      let freshStrava = allActivities.filter((a: any) => !a.manual);
 
-      // 📥 Fetch existing records for this user
+      // 🛡️ Freeze protection — only include activities after 18 Oct 2025
+      freshStrava = freshStrava.filter((a: any) => {
+        const startDate = new Date(a.start_date);
+        return startDate >= refreshCutoff;
+      });
+
+      console.log(
+        `🧭 ${profile.user_id}: Refreshing ${freshStrava.length} activities after cutoff`
+      );
+
+      if (freshStrava.length === 0) continue; // nothing new to update
+
+      // 📥 Fetch existing activities
       const { data: existing, error: existingError } = await supabase
         .from("activities")
-        .select("id, strava_id, is_valid, is_valid_locked, derived_type")
+        .select("id, strava_id, is_valid, is_valid_locked, derived_type, start_date")
         .eq("user_id", profile.user_id);
 
       if (existingError) continue;
@@ -89,15 +109,21 @@ export async function POST() {
             is_valid: a.is_valid,
             is_valid_locked: a.is_valid_locked,
             derived_type: a.derived_type,
+            start_date: a.start_date,
           },
         ])
       );
 
       const stravaIds = new Set(freshStrava.map((a: any) => String(a.id)));
 
-      // ❌ Remove deleted Strava activities (only unlocked)
+      // ❌ Delete missing Strava activities (only unlocked + after cutoff)
       const deletedIds = (existing || [])
-        .filter((a) => !stravaIds.has(String(a.strava_id)) && !a.is_valid_locked)
+        .filter(
+          (a) =>
+            !stravaIds.has(String(a.strava_id)) &&
+            !a.is_valid_locked &&
+            new Date(a.start_date) >= refreshCutoff
+        )
         .map((a) => a.strava_id);
 
       if (deletedIds.length) {
@@ -109,17 +135,22 @@ export async function POST() {
         cleanedUsers++;
       }
 
-      // 🧩 Prepare upserts (preserve manual FALSE always + reclassification + lock protection)
+      // 🧩 Prepare upserts
       const formatted: any[] = [];
 
       for (const a of freshStrava) {
         const km = Number(a.distance || 0) / 1000;
         const paceMinPerKm =
-          a.moving_time > 0 ? (a.moving_time / 60) / (a.distance / 1000 || 1) : 0;
+          a.moving_time > 0
+            ? (a.moving_time / 60) / (a.distance / 1000 || 1)
+            : 0;
 
         // ✅ Reclassification logic
         let derivedType = a.type;
-        if ((a.type === "Run" || a.type === "TrailRun") && paceMinPerKm >= 8.5) {
+        if (
+          (a.type === "Run" || a.type === "TrailRun") &&
+          paceMinPerKm >= 8.5
+        ) {
           derivedType = "Reclassified-Walk";
         }
 
