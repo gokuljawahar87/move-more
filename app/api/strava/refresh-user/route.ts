@@ -4,6 +4,9 @@ import { supabase } from "@/lib/supabaseClient";
 const challengeStart = new Date("2025-10-01T00:00:00+05:30");
 const challengeStartEpoch = Math.floor(challengeStart.getTime() / 1000);
 
+// 🚫 Freeze cutoff date — protect all activities before this
+const refreshCutoff = new Date("2025-10-18T00:00:00+05:30");
+
 export async function POST(req: Request) {
   try {
     const { user_id } = await req.json();
@@ -25,12 +28,8 @@ export async function POST(req: Request) {
     let accessToken = profile.strava_access_token;
     const now = Math.floor(Date.now() / 1000);
 
-    // ✅ Refresh token if expired
-    if (
-      !accessToken ||
-      (profile.strava_token_expires_at &&
-        profile.strava_token_expires_at < now)
-    ) {
+    // 🔁 Refresh token if expired
+    if (!accessToken || profile.strava_token_expires_at < now) {
       const tokenRes = await fetch("https://www.strava.com/oauth/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -43,10 +42,7 @@ export async function POST(req: Request) {
       });
 
       if (!tokenRes.ok) {
-        return NextResponse.json(
-          { error: "Failed to refresh Strava token" },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to refresh Strava token" }, { status: 500 });
       }
 
       const tokenData = await tokenRes.json();
@@ -62,24 +58,19 @@ export async function POST(req: Request) {
         .eq("user_id", user_id);
     }
 
-    if (!accessToken) {
-      return NextResponse.json({ error: "Missing access token" }, { status: 400 });
-    }
-
-    // ✅ Fetch all activities from Strava (since Oct 1)
+    // ✅ Fetch activities from Strava since challenge start
     let page = 1;
     let allActivities: any[] = [];
     let keepFetching = true;
 
     while (keepFetching) {
       const res = await fetch(
-        `https://www.strava.com/api/v3/athlete/activities?after=${challengeStartEpoch}&per_page=50&page=${page}`,
+        `https://www.strava.com/api/v3/athlete/activities?after=${challengeStartEpoch}&per_page=100&page=${page}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
-
       if (!res.ok) break;
-      const batch = await res.json();
 
+      const batch = await res.json();
       if (Array.isArray(batch) && batch.length > 0) {
         allActivities.push(...batch);
         page++;
@@ -88,30 +79,25 @@ export async function POST(req: Request) {
       }
     }
 
-    // ✅ Filter only valid (non-manual) activities
-    const filtered = allActivities.filter((a: any) => !a.manual);
+    // ✅ Filter only non-manual + after cutoff
+    const filtered = allActivities.filter((a: any) => {
+      if (a.manual) return false;
+      const startDate = new Date(a.start_date);
+      return startDate >= refreshCutoff;
+    });
 
-    // ✅ Prepare IDs for deletion check
-    const currentStravaIds = filtered.map((a: any) => a.id);
-
-    // ✅ Delete from Supabase any activities no longer on Strava
-    await supabase
-      .from("activities")
-      .delete()
-      .eq("user_id", user_id)
-      .not("strava_id", "in", `(${currentStravaIds.join(",") || 0})`);
+    console.log(`🧭 User ${user_id}: Found ${filtered.length} activities after cutoff`);
 
     if (filtered.length === 0) {
       return NextResponse.json({
         success: true,
         refreshed: 0,
-        deleted: 0,
         skipped: true,
-        message: "No valid activities found after filtering.",
+        message: "No activities found after cutoff — older ones preserved.",
       });
     }
 
-    // ✅ Format activities for upsert
+    // ✅ Prepare formatted activities for upsert
     const formatted = filtered.map((a: any) => ({
       user_id,
       strava_id: a.id,
@@ -121,55 +107,40 @@ export async function POST(req: Request) {
       moving_time: a.moving_time,
       start_date: a.start_date,
       strava_url: `https://www.strava.com/activities/${a.id}`,
-      is_valid: true,
+      is_valid: true, // default true for new activities only
     }));
 
-    // ✅ Fetch existing activities to compare (for skip optimization)
+    // ✅ Fetch existing for lock protection
     const { data: existingActs } = await supabase
       .from("activities")
-      .select("strava_id, name, distance, moving_time, type")
+      .select("strava_id, is_valid, is_valid_locked, start_date")
       .eq("user_id", user_id);
 
-    const existingMap = new Map(existingActs?.map((a) => [a.strava_id, a]) || []);
-    const changed = formatted.filter((a) => {
-      const ex = existingMap.get(a.strava_id);
-      if (!ex) return true;
-      return (
-        ex.name !== a.name ||
-        ex.distance !== a.distance ||
-        ex.moving_time !== a.moving_time ||
-        ex.type !== a.type
-      );
+    const existingMap = new Map(
+      (existingActs || []).map((a) => [String(a.strava_id), a])
+    );
+
+    const upserts = formatted.filter((a) => {
+      const existing = existingMap.get(String(a.strava_id));
+      if (existing?.is_valid_locked) return false; // skip locked
+      return true;
     });
 
-    if (changed.length === 0) {
-      return NextResponse.json({
-        success: true,
-        refreshed: 0,
-        deleted: 0,
-        skipped: true,
-        message: "No new or updated activities since last sync.",
-      });
+    if (upserts.length > 0) {
+      const { error: upsertError } = await supabase
+        .from("activities")
+        .upsert(upserts, { onConflict: "strava_id" });
+
+      if (upsertError) throw upsertError;
     }
-
-    // ✅ Upsert changed or new activities (overwrite if changed)
-    const { error: insertError } = await supabase
-      .from("activities")
-      .upsert(changed, {
-        onConflict: "strava_id",
-        ignoreDuplicates: false, // force update existing entries
-      });
-
-    if (insertError) throw insertError;
 
     return NextResponse.json({
       success: true,
-      refreshed: changed.length,
-      deleted: allActivities.length - filtered.length,
-      skipped: false,
+      refreshed: upserts.length,
+      message: `Refreshed ${upserts.length} activities after cutoff.`,
     });
   } catch (err: any) {
-    console.error("User manual refresh error:", err);
+    console.error("User refresh error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

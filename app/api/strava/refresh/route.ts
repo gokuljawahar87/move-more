@@ -1,4 +1,3 @@
-// app/api/strava/refresh/route.ts
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -7,7 +6,7 @@ const challengeStart = new Date("2025-10-01T00:00:00+05:30");
 const challengeStartEpoch = Math.floor(challengeStart.getTime() / 1000);
 
 // ⏳ Freeze cutoff date — do NOT touch activities before this date
-const refreshCutoff = new Date("2025-10-18T00:00:00+05:30");
+const refreshCutoff = new Date("2025-10-20T00:00:00+05:30");
 
 export async function POST() {
   try {
@@ -82,7 +81,7 @@ export async function POST() {
       // 🧹 Remove manual uploads
       let freshStrava = allActivities.filter((a: any) => !a.manual);
 
-      // 🛡️ Freeze protection — only include activities after 18 Oct 2025
+      // 🛡️ Freeze protection — only include activities after 20 Oct 2025
       freshStrava = freshStrava.filter((a: any) => {
         const startDate = new Date(a.start_date);
         return startDate >= refreshCutoff;
