@@ -6,31 +6,32 @@ import { Activities } from "@/components/Activities";
 import Leaderboard from "@/components/Leaderboard";
 import { TeamPerformance } from "@/components/TeamPerformance";
 import { Header } from "@/components/Header";
-import { Home, Trophy, Users, BarChart3 } from "lucide-react";
-import StatsPage from "./stats/page"; // ✅ import stats page
+import StatsPage from "./stats/page";
+import SuspiciousActivitiesPage from "../suspicious-activities/page"; // 🆕 Import Suspicious Page
+import BottomNav from "@/components/BottomNav"; // ✅ Bottom Navigation
 
 export default function AppPage() {
-  const [activeTab, setActiveTab] = useState("activities");
+  const [activeTab, setActiveTab] = useState<
+    "activities" | "leaderboard" | "teams" | "stats" | "suspicious"
+  >("activities");
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
     async function checkProfile() {
       try {
-        let res = await fetch("/api/profile");
+        const res = await fetch("/api/profile");
         if (!res.ok) throw new Error("Profile not found");
 
-        let profile = await res.json();
-        if (!profile || !profile.user_id) {
-          throw new Error("No profile found");
-        }
+        const profile = await res.json();
+        if (!profile || !profile.user_id) throw new Error("No profile found");
 
-        // ✅ Save user_id in localStorage as fallback
+        // ✅ Save user_id in localStorage for fallback
         localStorage.setItem("user_id", profile.user_id);
       } catch (err) {
         console.warn("Profile check failed, trying restore:", err);
 
-        // ✅ Try restoring from localStorage
+        // ✅ Attempt restoring from localStorage
         const savedUserId = localStorage.getItem("user_id");
         if (savedUserId) {
           try {
@@ -53,7 +54,7 @@ export default function AppPage() {
           }
         }
 
-        // If all fails, go to registration
+        // ❌ If all fails, redirect to registration
         router.replace("/register");
       } finally {
         setLoading(false);
@@ -76,71 +77,17 @@ export default function AppPage() {
       {/* Header */}
       <Header />
 
-      {/* Main content - with padding so header doesn’t overlap */}
+      {/* Main content area */}
       <div className="flex-1 overflow-y-auto pb-32 pt-16">
         {activeTab === "activities" && <Activities />}
         {activeTab === "leaderboard" && <Leaderboard />}
         {activeTab === "teams" && <TeamPerformance />}
         {activeTab === "stats" && <StatsPage />}
+        {activeTab === "suspicious" && <SuspiciousActivitiesPage />}
       </div>
 
-      {/* Bottom navigation pill */}
-      <nav
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 flex w-[95%] max-w-2xl 
-        bg-pink-700 rounded-full shadow-lg px-8 py-4 justify-around items-center z-50"
-      >
-        <button
-          onClick={() => setActiveTab("activities")}
-          className={`flex flex-col items-center text-sm ${
-            activeTab === "activities" ? "text-white font-bold" : "text-gray-200"
-          }`}
-        >
-          <Home
-            size={26}
-            className={activeTab === "activities" ? "text-white" : "text-gray-200"}
-          />
-          <span>Activities</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("leaderboard")}
-          className={`flex flex-col items-center text-sm ${
-            activeTab === "leaderboard" ? "text-white font-bold" : "text-gray-200"
-          }`}
-        >
-          <Trophy
-            size={26}
-            className={activeTab === "leaderboard" ? "text-white" : "text-gray-200"}
-          />
-          <span>Leaderboard</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("teams")}
-          className={`flex flex-col items-center text-sm ${
-            activeTab === "teams" ? "text-white font-bold" : "text-gray-200"
-          }`}
-        >
-          <Users
-            size={26}
-            className={activeTab === "teams" ? "text-white" : "text-gray-200"}
-          />
-          <span>Teams</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("stats")}
-          className={`flex flex-col items-center text-sm ${
-            activeTab === "stats" ? "text-white font-bold" : "text-gray-200"
-          }`}
-        >
-          <BarChart3
-            size={26}
-            className={activeTab === "stats" ? "text-white" : "text-gray-200"}
-          />
-          <span>Stats</span>
-        </button>
-      </nav>
+      {/* Bottom Navigation */}
+      <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
     </div>
   );
 }

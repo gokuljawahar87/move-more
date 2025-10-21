@@ -253,11 +253,18 @@ export function Activities() {
         .map(([dateLabel, acts]) => (
           <div key={dateLabel} className="space-y-3">
             <div className="flex justify-between items-center">
-              <span className="font-medium">{dateLabel}</span>
-              <span className="bg-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm">
-                {acts.length} activities
-              </span>
-            </div>
+  <span className="font-medium">{dateLabel}</span>
+
+  {/* 🧍‍♂️ Show activities and unique participants count */}
+  {(() => {
+    const uniqueParticipants = new Set(acts.map((a) => a.user_id)).size;
+    return (
+      <span className="bg-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm">
+        {acts.length} activities • {uniqueParticipants} participants
+      </span>
+    );
+  })()}
+</div>
 
             <div className="space-y-3">
               {acts
