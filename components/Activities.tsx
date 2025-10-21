@@ -12,6 +12,7 @@ import {
 
 type Act = {
   id: number | string;
+user_id: string; // ✅ Add this line
   name: string;
   type: string;
   derived_type?: string;
