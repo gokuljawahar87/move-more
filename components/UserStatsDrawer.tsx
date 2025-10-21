@@ -49,20 +49,25 @@ export default function UserStatsDrawer({ sidebarOpen, onClose, profile }: any) 
         position: "bottom",
         labels: {
           usePointStyle: true,
-          generateLabels: (chart) => {
-            const dataset = chart.data.datasets[0];
-            const total = dataset.data.reduce((a: number, b: number) => a + b, 0);
-            return chart.data.labels.map((label: any, i: number) => {
-              const value = dataset.data[i] as number;
-              const percent = total > 0 ? ((value / total) * 100).toFixed(1) : "0";
-              return {
-                text: `${label}: ${value.toFixed(1)} km (${percent}%)`,
-                fillStyle: dataset.backgroundColor?.[i] || "#000",
-                hidden: false,
-                index: i,
-              };
-            });
-          },
+     generateLabels: (chart) => {
+  const dataset = chart.data.datasets[0];
+  const labels = chart.data.labels ?? []; // ✅ fallback if undefined
+  const total = (dataset.data as number[]).reduce((a, b) => a + b, 0);
+
+  return labels.map((label, i) => {
+    const value = (dataset.data[i] as number) || 0;
+    const percent = total > 0 ? ((value / total) * 100).toFixed(1) : "0";
+    return {
+      text: `${label}: ${value.toFixed(1)} km (${percent}%)`,
+      fillStyle:
+        (Array.isArray(dataset.backgroundColor)
+          ? dataset.backgroundColor[i]
+          : "#000") || "#000",
+      hidden: false,
+      index: i,
+    };
+  });
+},
         },
       },
       tooltip: { enabled: false },
