@@ -47,13 +47,36 @@ export default function UserStatsDrawer({ open, onClose, userId }: UserStatsDraw
     ],
   };
 
-  const options = {
-    plugins: {
-      legend: { display: true, position: "bottom" },
-      tooltip: { enabled: true },
+  import { ChartOptions } from "chart.js";
+
+// ✅ Explicit type ensures build safety
+const options: ChartOptions<"pie"> = {
+  plugins: {
+    legend: {
+      display: true,
+      position: "bottom", // ✅ valid literal
+      labels: {
+        usePointStyle: true,
+        generateLabels: (chart) => {
+          const dataset = chart.data.datasets[0];
+          const total = dataset.data.reduce((a: number, b: number) => a + b, 0);
+          return chart.data.labels.map((label: any, i: number) => {
+            const value = dataset.data[i] as number;
+            return {
+              text: `${label}: ${value.toFixed(1)} km`,
+              fillStyle: dataset.backgroundColor?.[i] || "#000",
+              hidden: false,
+              index: i,
+            };
+          });
+        },
+      },
     },
-    cutout: "70%",
-  };
+    tooltip: { enabled: false }, // we show data in legend itself
+  },
+  cutout: "70%",
+};
+
 
   return (
     <AnimatePresence>
