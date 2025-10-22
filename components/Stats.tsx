@@ -1,9 +1,16 @@
 "use client";
 
-import { FaTree, FaRunning, FaBicycle, FaShoePrints, FaGlobe } from "react-icons/fa";
+import {
+  FaTree,
+  FaRunning,
+  FaBicycle,
+  FaShoePrints,
+  FaGlobe,
+  FaWalking,
+} from "react-icons/fa";
 
 interface StatsProps {
-  total_distance: number;   // meters
+  total_distance: number; // meters
   cycling_distance: number; // meters
   running_distance: number; // meters
   walking_distance: number; // meters
@@ -23,57 +30,68 @@ export default function Stats({
   const steps = Math.round(Number(walkingKm) * 1312); // approx steps per km
   const co2Saved = (Number(totalKm) * 0.21).toFixed(1); // kg CO2 saved per km
 
-  // Common card style
+  // Common card style — unified height and consistent layout
   const cardStyle =
-    "rounded-2xl shadow-md p-6 flex items-center justify-between bg-gray-50 border border-gray-200";
+    "rounded-2xl shadow-md p-5 flex items-center justify-between bg-gray-50 border border-gray-200 min-h-[120px]";
+
+  const iconSize = "text-4xl";
 
   return (
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-      {/* Total KM */}
+      {/* Total KM Covered */}
       <div className={`col-span-1 md:col-span-1 lg:col-span-2 ${cardStyle}`}>
         <div>
-          <p className="text-gray-600">Total KM Covered</p>
+          <p className="text-gray-600 text-sm">Total KM Covered</p>
           <h2 className="text-3xl font-bold text-gray-900">{totalKm} km</h2>
         </div>
-        <FaGlobe className="text-4xl text-blue-500" />
+        <FaGlobe className={`${iconSize} text-blue-500`} />
       </div>
 
       {/* CO2 Saved */}
-      <div className="rounded-2xl shadow-md p-6 flex items-center justify-between bg-green-100 text-green-900 border border-green-200">
+      <div className="rounded-2xl shadow-md p-5 flex items-center justify-between bg-green-100 text-green-900 border border-green-200 min-h-[120px]">
         <div>
-          <p className="text-green-700">Kg of CO₂ Saved</p>
+          <p className="text-green-700 text-sm">Kg of CO₂ Saved</p>
           <h2 className="text-3xl font-bold">{co2Saved} kg</h2>
         </div>
-        <FaTree className="text-4xl" />
+        <FaTree className={`${iconSize}`} />
       </div>
 
-      {/* Steps from Walking */}
-      <div className={cardStyle}>
+      {/* Steps (Walking) */}
+      <div className={`${cardStyle} bg-purple-50`}>
         <div>
-          <p className="text-gray-600">Steps (Walking)</p>
+          <p className="text-gray-600 text-sm">Steps (Walking)</p>
           <h2 className="text-3xl font-bold text-gray-900">
             {steps.toLocaleString()}
           </h2>
         </div>
-        <FaShoePrints className="text-4xl text-purple-500" />
+        <FaShoePrints className={`${iconSize} text-purple-600`} />
       </div>
 
-      {/* Cycling Distance */}
+      {/* KM by Walking */}
+      <div className={`${cardStyle} bg-purple-50`}>
+        <div>
+          <p className="text-gray-600 text-sm">KM by Walking</p>
+          <h2 className="text-3xl font-bold text-gray-900">{walkingKm} km</h2>
+        </div>
+        <FaWalking className={`${iconSize} text-purple-600`} />
+      </div>
+
+      {/* KM by Cycling */}
       <div className={cardStyle}>
         <div>
-          <p className="text-gray-600">KM by Cycling</p>
+          <p className="text-gray-600 text-sm">KM by Cycling</p>
           <h2 className="text-3xl font-bold text-gray-900">{cyclingKm} km</h2>
         </div>
-        <FaBicycle className="text-4xl text-orange-500" />
+        <FaBicycle className={`${iconSize} text-orange-500`} />
       </div>
 
-      {/* Running Distance */}
+      {/* KM by Running */}
       <div className={cardStyle}>
         <div>
-          <p className="text-gray-600">KM by Running</p>
+          <p className="text-gray-600 text-sm">KM by Running</p>
           <h2 className="text-3xl font-bold text-gray-900">{runningKm} km</h2>
         </div>
-        <FaRunning className="text-4xl text-red-500" />
+        <FaRunning className={`${iconSize} text-red-500`} />
       </div>
     </div>
   );

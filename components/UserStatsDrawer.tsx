@@ -3,33 +3,39 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 import { Pie } from "react-chartjs-2";
-import {
-  Chart as ChartJS,
-  ArcElement,
-  Tooltip,
-  Legend,
-  ChartOptions,
-} from "chart.js";
-import { FaWalking, FaBicycle, FaRunning } from "react-icons/fa";
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, ChartOptions } from "chart.js";
+import { FaRunning, FaShoePrints, FaBicycle, FaMedal, FaTrophy, FaUsers } from "react-icons/fa";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-export default function UserStatsDrawer({ sidebarOpen, onClose, profile }: any) {
-  const [stats, setStats] = useState<any>(null);
+interface UserStatsDrawerProps {
+  isOpen: boolean;
+  onClose: () => void;
+  userId: string | null;
+}
 
+export default function UserStatsDrawer({ isOpen, onClose, userId }: UserStatsDrawerProps) {
+  const [stats, setStats] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Fetch user stats when opened
   useEffect(() => {
-    if (!sidebarOpen || !profile?.user_id) return;
+    if (!isOpen || !userId) return;
     (async () => {
       try {
-        const res = await fetch(`/api/user/stats?user_id=${profile.user_id}`);
+        setLoading(true);
+        const res = await fetch(`/api/user/stats?user_id=${userId}`);
         const data = await res.json();
         setStats(data);
       } catch (err) {
         console.error("Failed to fetch user stats:", err);
+      } finally {
+        setLoading(false);
       }
     })();
-  }, [sidebarOpen, profile]);
+  }, [isOpen, userId]);
 
+  // 🧩 Chart setup
   const data = {
     labels: ["Walk", "Run", "Cycle"],
     datasets: [
@@ -41,33 +47,31 @@ export default function UserStatsDrawer({ sidebarOpen, onClose, profile }: any) 
     ],
   };
 
-  // ✅ Chart options with typed legend showing values
   const options: ChartOptions<"pie"> = {
+    layout: { padding: { top: 0, bottom: 0 } },
     plugins: {
       legend: {
         display: true,
         position: "bottom",
         labels: {
-          usePointStyle: true,
-     generateLabels: (chart) => {
-  const dataset = chart.data.datasets[0];
-  const labels = chart.data.labels ?? []; // ✅ fallback if undefined
-  const total = (dataset.data as number[]).reduce((a, b) => a + b, 0);
-
-  return labels.map((label, i) => {
-    const value = (dataset.data[i] as number) || 0;
-    const percent = total > 0 ? ((value / total) * 100).toFixed(1) : "0";
-    return {
-      text: `${label}: ${value.toFixed(1)} km (${percent}%)`,
-      fillStyle:
-        (Array.isArray(dataset.backgroundColor)
-          ? dataset.backgroundColor[i]
-          : "#000") || "#000",
-      hidden: false,
-      index: i,
-    };
-  });
-},
+          boxWidth: 16,
+          boxHeight: 10,
+          padding: 10,
+          font: { size: 12 },
+          generateLabels: (chart) => {
+            const dataset = chart.data.datasets[0];
+            const total = (dataset.data as number[]).reduce((a, b) => a + b, 0);
+            return chart.data.labels!.map((label: any, i: number) => {
+              const value = dataset.data[i] as number;
+              const percent = total > 0 ? ((value / total) * 100).toFixed(1) : "0";
+              return {
+                text: `${label} – ${value.toFixed(1)} km (${percent}%)`,
+                fillStyle: dataset.backgroundColor![i] as string,
+                strokeStyle: dataset.backgroundColor![i] as string,
+                hidden: false,
+              };
+            });
+          },
         },
       },
       tooltip: { enabled: false },
@@ -77,89 +81,179 @@ export default function UserStatsDrawer({ sidebarOpen, onClose, profile }: any) 
 
   return (
     <AnimatePresence>
-      {sidebarOpen && (
-        <motion.div
-          className="fixed inset-0 bg-black bg-opacity-40 z-50"
-          onClick={onClose}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
+      {isOpen && (
+        <>
+          {/* Overlay */}
           <motion.div
-            className="absolute top-0 left-0 w-80 h-full bg-white text-gray-900 shadow-xl p-5 overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-            initial={{ x: -320 }}
+            className="fixed inset-0 bg-black bg-opacity-40 z-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+          />
+
+          {/* Sidebar Drawer */}
+          <motion.div
+            className="fixed top-0 left-0 w-80 h-full bg-white text-gray-900 shadow-xl p-6 overflow-y-auto z-50"
+            initial={{ x: "-100%" }}
             animate={{ x: 0 }}
-            exit={{ x: -320 }}
+            exit={{ x: "-100%" }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold">📊 Your Activity Stats</h2>
-              <button
-                onClick={onClose}
-                className="text-gray-500 hover:text-black text-lg"
-              >
+              <button onClick={onClose} className="text-gray-500 hover:text-black text-lg">
                 ✕
               </button>
             </div>
 
-            {stats ? (
+            {loading ? (
+              <p className="text-center text-gray-500 mt-10">Loading stats...</p>
+            ) : stats ? (
               <>
-                <div className="space-y-3 mb-6">
+                {/* Activity Summary */}
+                <div className="space-y-3 mb-4">
                   <div className="flex justify-between text-gray-800">
                     <span className="font-medium">Active Days</span>
                     <span className="font-semibold">{stats.activeDays}</span>
                   </div>
+
                   <div className="flex justify-between text-gray-800">
                     <span className="font-medium">Total Activities</span>
                     <span className="font-semibold">{stats.totalActivities}</span>
                   </div>
-                </div>
 
-                {/* Pie Chart */}
-                <div className="relative w-64 h-64 mx-auto flex items-center justify-center">
-                  <Pie data={data} options={options} />
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <p className="text-xl font-bold text-gray-900 text-center leading-none">
-                      {stats.totalKm.toFixed(1)} km
-                    </p>
+                  {/* 🏅 Total Points */}
+                  <div className="flex justify-between text-gray-800">
+                    <span className="font-medium flex items-center gap-2">
+                      <FaMedal className="text-yellow-500" /> Total Points
+                    </span>
+                    <span className="font-semibold">{Math.round(stats.totalPoints)}</span>
+                  </div>
+
+                  {/* 👥 Team Rank */}
+                  <div className="flex justify-between text-gray-800">
+                    <span className="font-medium flex items-center gap-2">
+                      <FaTrophy className="text-blue-600" /> Team Position
+                    </span>
+                    <span className="font-semibold">
+                      {stats.teamRank ? `#${stats.teamRank}` : "-"}
+                    </span>
+                  </div>
+
+                  {/* 🌍 Overall Rank */}
+                  <div className="flex justify-between text-gray-800">
+                    <span className="font-medium flex items-center gap-2">
+                      <FaUsers className="text-green-600" /> Overall Position
+                    </span>
+                    <span className="font-semibold">
+                      {stats.overallRank ? `#${stats.overallRank}` : "-"}{" "}
+                      <span className="text-gray-500 text-sm">
+                        / {stats.totalParticipants || 0}
+                      </span>
+                    </span>
                   </div>
                 </div>
 
-                {/* Longest activities section */}
-                <div className="mt-6 space-y-3">
-                  <div className="rounded-xl bg-purple-100 text-purple-900 p-4 flex items-center justify-between shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <FaWalking className="text-2xl" />
-                      <span className="font-semibold">Longest Walk</span>
-                    </div>
-                    <span>{stats.longestWalk ? `${stats.longestWalk.toFixed(1)} km` : "—"}</span>
+                {/* 🥧 Pie Chart (Truly Centered with Plugin) */}
+<div className="relative flex flex-col items-center mt-6">
+  <div className="relative w-60 h-60">
+    <Pie
+      data={data}
+      options={{
+        ...options,
+        layout: { padding: 0 },
+        cutout: "75%",
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: "bottom",
+            align: "center",
+            labels: {
+              boxWidth: 14,
+              boxHeight: 10,
+              padding: 12,
+              font: { size: 12 },
+              generateLabels: (chart) => {
+                const dataset = chart.data.datasets[0];
+                const total = (dataset.data as number[]).reduce((a, b) => a + b, 0);
+                return chart.data.labels!.map((label: any, i: number) => {
+                  const value = dataset.data[i] as number;
+                  const percent = total > 0 ? ((value / total) * 100).toFixed(1) : "0";
+                  return {
+                    text: `${label} – ${value.toFixed(1)} km (${percent}%)`,
+                    fillStyle: dataset.backgroundColor![i] as string,
+                    strokeStyle: dataset.backgroundColor![i] as string,
+                    hidden: false,
+                  };
+                });
+              },
+            },
+          },
+          tooltip: { enabled: false },
+        },
+      }}
+      plugins={[
+        {
+          id: "centerText",
+          afterDraw: (chart) => {
+            const { ctx, chartArea } = chart;
+            if (!chartArea || !stats?.totalKm) return;
+            const centerX = (chartArea.left + chartArea.right) / 2;
+            const centerY = (chartArea.top + chartArea.bottom) / 2;
+
+            ctx.save();
+            ctx.font = "bold 18px sans-serif";
+            ctx.fillStyle = "#111827";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(`${stats.totalKm.toFixed(1)} km`, centerX, centerY);
+            ctx.restore();
+          },
+        },
+      ]}
+    />
+  </div>
+</div>
+
+
+                {/* 🏃 Longest Activities */}
+                <div className="grid gap-3 mt-8">
+                  <div className="p-3 rounded-xl shadow bg-gray-50 flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-gray-700">
+                      <FaShoePrints className="text-purple-500" /> Longest Walk
+                    </span>
+                    <span className="font-semibold text-gray-900">
+                      {stats.longestWalk ? `${stats.longestWalk.toFixed(1)} km` : "No activity"}
+                    </span>
                   </div>
 
-                  <div className="rounded-xl bg-red-100 text-red-900 p-4 flex items-center justify-between shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <FaRunning className="text-2xl" />
-                      <span className="font-semibold">Longest Run</span>
-                    </div>
-                    <span>{stats.longestRun ? `${stats.longestRun.toFixed(1)} km` : "—"}</span>
+                  <div className="p-3 rounded-xl shadow bg-gray-50 flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-gray-700">
+                      <FaRunning className="text-red-500" /> Longest Run
+                    </span>
+                    <span className="font-semibold text-gray-900">
+                      {stats.longestRun ? `${stats.longestRun.toFixed(1)} km` : "No activity"}
+                    </span>
                   </div>
 
-                  <div className="rounded-xl bg-orange-100 text-orange-900 p-4 flex items-center justify-between shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <FaBicycle className="text-2xl" />
-                      <span className="font-semibold">Longest Ride</span>
-                    </div>
-                    <span>{stats.longestCycle ? `${stats.longestCycle.toFixed(1)} km` : "—"}</span>
+                  <div className="p-3 rounded-xl shadow bg-gray-50 flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-gray-700">
+                      <FaBicycle className="text-orange-500" /> Longest Cycle
+                    </span>
+                    <span className="font-semibold text-gray-900">
+                      {stats.longestCycle ? `${stats.longestCycle.toFixed(1)} km` : "No activity"}
+                    </span>
                   </div>
                 </div>
               </>
             ) : (
-              <p className="text-gray-500 text-sm text-center mt-10">
-                Loading stats...
-              </p>
+              <p className="text-gray-500 text-sm text-center mt-10">No stats available.</p>
             )}
           </motion.div>
-        </motion.div>
+        </>
       )}
     </AnimatePresence>
   );
