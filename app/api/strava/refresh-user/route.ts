@@ -5,7 +5,7 @@ const challengeStart = new Date("2025-10-01T00:00:00+05:30");
 const challengeStartEpoch = Math.floor(challengeStart.getTime() / 1000);
 
 // 🚫 Freeze cutoff date — protect all activities before this
-const refreshCutoff = new Date("2025-10-18T00:00:00+05:30");
+const refreshCutoff = new Date("2025-10-24T00:00:00+05:30");
 
 export async function POST(req: Request) {
   try {
@@ -86,7 +86,9 @@ export async function POST(req: Request) {
       return startDate >= refreshCutoff;
     });
 
-    console.log(`🧭 User ${user_id}: Found ${filtered.length} activities after cutoff`);
+    console.log(
+      `🧭 User ${user_id}: Found ${filtered.length} activities after cutoff (${refreshCutoff.toISOString().split("T")[0]})`
+    );
 
     if (filtered.length === 0) {
       return NextResponse.json({
