@@ -6,10 +6,7 @@ const challengeStart = new Date("2025-10-01T00:00:00+05:30");
 const challengeStartEpoch = Math.floor(challengeStart.getTime() / 1000);
 
 // ⏳ Freeze cutoff date — do NOT touch activities before this date
-const refreshCutoff = new Date("2025-10-24T00:00:00+05:30");
-
-// ✅ List of user IDs allowed to override the cutoff
-const OVERRIDE_USERS = ["U332247", "U436388"];
+const refreshCutoff = new Date("2025-10-26T00:00:00+05:30");
 
 export async function POST() {
   try {
@@ -84,20 +81,14 @@ export async function POST() {
       // 🧹 Remove manual uploads
       let freshStrava = allActivities.filter((a: any) => !a.manual);
 
-      // 🛡️ Freeze protection — only include activities after cutoff,
-      //     except for override users who can bypass this restriction
-      const isOverrideUser = OVERRIDE_USERS.includes(profile.user_id);
+      // 🛡️ Freeze protection — only include activities after cutoff
       freshStrava = freshStrava.filter((a: any) => {
         const startDate = new Date(a.start_date);
-        return isOverrideUser || startDate >= refreshCutoff;
+        return startDate >= refreshCutoff;
       });
 
       console.log(
-        `🧭 ${profile.user_id}: ${
-          isOverrideUser
-            ? "Override refresh enabled — all activities since challenge start"
-            : `Refreshing ${freshStrava.length} activities after cutoff (${refreshCutoff.toISOString().split("T")[0]})`
-        }`
+        `🧭 ${profile.user_id}: Refreshing ${freshStrava.length} activities after cutoff (${refreshCutoff.toISOString().split("T")[0]})`
       );
 
       if (freshStrava.length === 0) continue; // nothing new to update
