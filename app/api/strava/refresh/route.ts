@@ -6,7 +6,7 @@ const challengeStart = new Date("2025-10-01T00:00:00+05:30");
 const challengeStartEpoch = Math.floor(challengeStart.getTime() / 1000);
 
 // ⏳ Freeze cutoff date — do NOT touch activities before this date
-const refreshCutoff = new Date("2025-10-26T00:00:00+05:30");
+const refreshCutoff = new Date("2025-10-29T00:00:00+05:30");
 
 export async function POST() {
   try {
