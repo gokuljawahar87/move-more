@@ -118,10 +118,10 @@ export async function GET(request: Request) {
           const km = Number(a.distance || 0) / 1000;
           const type = a.derived_type || a.type;
 
-          // 🧮 Points logic
+          // 🧮 Points logic (UPDATED)
           if (type === "Run" || type === "TrailRun") {
             run += km;
-            points += km * 25; // 🏃 Run = 25 pts/km
+            points += km * 22; // 🏃 Run = 22 pts/km (updated from 25)
           } else if (type === "Walk" || type === "Reclassified-Walk") {
             walk += km;
             points += km * 14; // 🚶 Walk = 14 pts/km

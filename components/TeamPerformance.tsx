@@ -160,7 +160,7 @@ export function TeamPerformance() {
                   <tr className="bg-gray-100 text-[10px] sm:text-xs text-gray-600">
                     <th className="p-1 border">🚶 14 pts/km</th>
                     <th className="p-1 border">🚴 6 pts/km</th>
-                    <th className="p-1 border">🏃 25 pts/km</th>
+                    <th className="p-1 border">🏃 22 pts/km</th>
                   </tr>
                 </thead>
                 <tbody>

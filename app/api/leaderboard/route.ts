@@ -53,7 +53,6 @@ export async function GET() {
 
     if (error) throw error;
 
-    // ✅ Always use fallback empty array
     let profiles = rawProfiles ?? [];
 
     // ✅ Challenge start cutoff
@@ -107,7 +106,7 @@ export async function GET() {
 
         if (type === "Run" || type === "TrailRun") {
           run += km;
-          points += km * 25;
+          points += km * 22; // 🏃 updated from 25 → 22
         } else if (type === "Walk" || type === "Reclassified-Walk") {
           walk += km;
           points += km * 14;

@@ -7,6 +7,9 @@ const challengeStartEpoch = Math.floor(challengeStart.getTime() / 1000);
 // 🚫 Freeze cutoff date — protect all activities before this
 const refreshCutoff = new Date("2025-10-29T00:00:00+05:30");
 
+// 🚫 End of competition cutoff — ignore anything beyond this time
+const competitionCutoff = new Date("2025-10-31T22:00:00+05:30"); // 10 PM IST
+
 export async function POST(req: Request) {
   try {
     const { user_id } = await req.json();
@@ -79,15 +82,19 @@ export async function POST(req: Request) {
       }
     }
 
-    // ✅ Filter only non-manual + after cutoff
+    // ✅ Filter only non-manual + within valid window
     const filtered = allActivities.filter((a: any) => {
       if (a.manual) return false;
+
       const startDate = new Date(a.start_date);
-      return startDate >= refreshCutoff;
+      const endDate = new Date(startDate.getTime() + (a.moving_time || 0) * 1000);
+
+      // ✅ Include only if within the valid time window
+      return startDate >= refreshCutoff && endDate <= competitionCutoff;
     });
 
     console.log(
-      `🧭 User ${user_id}: Found ${filtered.length} activities after cutoff (${refreshCutoff.toISOString().split("T")[0]})`
+      `🧭 User ${user_id}: Found ${filtered.length} valid activities between ${refreshCutoff.toISOString().split("T")[0]} and cutoff ${competitionCutoff.toISOString()}`
     );
 
     if (filtered.length === 0) {
@@ -95,7 +102,7 @@ export async function POST(req: Request) {
         success: true,
         refreshed: 0,
         skipped: true,
-        message: "No activities found after cutoff — older ones preserved.",
+        message: "No valid activities found after cutoff — older ones preserved.",
       });
     }
 
@@ -139,7 +146,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       refreshed: upserts.length,
-      message: `Refreshed ${upserts.length} activities after cutoff.`,
+      message: `Refreshed ${upserts.length} activities within valid window.`,
     });
   } catch (err: any) {
     console.error("User refresh error:", err);

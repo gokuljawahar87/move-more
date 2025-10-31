@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { Menu } from "lucide-react";
-import UserStatsDrawer from "./UserStatsDrawer"; // ✅ use new drawer
+import UserStatsDrawer from "./UserStatsDrawer";
 
 export function Header() {
   const [initials, setInitials] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profile, setProfile] = useState<any>(null);
+  const [countdown, setCountdown] = useState("");
+  const [eventEnded, setEventEnded] = useState(false);
 
   useEffect(() => {
     async function fetchProfile() {
@@ -29,6 +31,35 @@ export function Header() {
     fetchProfile();
   }, []);
 
+  // 🎯 Countdown timer to 10 PM IST today (31 Oct 2025)
+  useEffect(() => {
+    const target = new Date("2025-10-31T22:00:00+05:30").getTime();
+
+    const interval = setInterval(() => {
+      const now = new Date().getTime();
+      const diff = target - now;
+
+      if (diff <= 0) {
+        setEventEnded(true);
+        setCountdown("");
+        clearInterval(interval);
+        return;
+      }
+
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      setCountdown(
+        `${hours.toString().padStart(2, "0")}:${minutes
+          .toString()
+          .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+      );
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const handleConnectStrava = () => {
     if (!profile?.user_id) return;
     window.location.href = `/api/strava/connect?user_id=${profile.user_id}`;
@@ -39,7 +70,6 @@ export function Header() {
       {/* 🔷 Header Bar */}
       <header className="flex items-center justify-between px-4 py-3 bg-blue-900 text-white shadow-md fixed top-0 left-0 right-0 z-40">
         <div className="flex items-center gap-3">
-          {/* Hamburger Button */}
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-2 rounded hover:bg-blue-800"
@@ -81,38 +111,28 @@ export function Header() {
         </div>
       </header>
 
-      {/* 🟧 Announcement Bar */}
-      <div className="fixed top-[56px] left-0 right-0 bg-orange-500 text-white text-sm font-medium h-[32px] flex items-center justify-center overflow-hidden z-30 shadow-md">
-        <div className="animate-marquee whitespace-nowrap hover:[animation-play-state:paused] text-center">
-          🏁 Event closes on <strong>Nov 14th</strong> — Keep Moving, Stay Active! 🚴‍♂️🏃‍♀️🚶‍♂️
-        </div>
+      {/* 🟧 Announcement Bar with Centered Countdown */}
+      <div className="fixed top-[56px] left-0 right-0 bg-orange-600 text-white text-sm font-semibold h-[32px] flex items-center justify-center z-30 shadow-md text-center px-4">
+        {!eventEnded ? (
+          <span>
+            🏁 Event Ends Today — Time Left:{" "}
+            <strong className="text-white">{countdown}</strong> ⏰
+          </span>
+        ) : (
+          <span className="text-white animate-pulse">
+            🛑 The app is closed for points reconciliation
+          </span>
+        )}
       </div>
 
       <div className="h-[35px]" />
 
-      {/* 🧭 NEW Stats Drawer */}
+      {/* 🧭 Stats Drawer */}
       <UserStatsDrawer
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         userId={profile?.user_id || null}
       />
-
-      <style jsx>{`
-        @keyframes marquee {
-          0% {
-            transform: translateX(100%);
-          }
-          100% {
-            transform: translateX(-100%);
-          }
-        }
-
-        .animate-marquee {
-          display: inline-block;
-          animation: marquee 24s linear infinite;
-          padding-left: 100%;
-        }
-      `}</style>
     </>
   );
 }

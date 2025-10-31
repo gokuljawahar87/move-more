@@ -8,6 +8,9 @@ const challengeStartEpoch = Math.floor(challengeStart.getTime() / 1000);
 // ⏳ Freeze cutoff date — do NOT touch activities before this date
 const refreshCutoff = new Date("2025-10-29T00:00:00+05:30");
 
+// 🚫 End of competition cutoff — ignore anything beyond this time
+const competitionCutoff = new Date("2025-10-31T22:00:00+05:30"); // 10 PM IST
+
 export async function POST() {
   try {
     const { data: profiles, error: fetchError } = await supabase
@@ -81,14 +84,15 @@ export async function POST() {
       // 🧹 Remove manual uploads
       let freshStrava = allActivities.filter((a: any) => !a.manual);
 
-      // 🛡️ Freeze protection — only include activities after cutoff
+      // 🛡️ Cutoff protection — include only activities after refresh cutoff AND before competition cutoff
       freshStrava = freshStrava.filter((a: any) => {
         const startDate = new Date(a.start_date);
-        return startDate >= refreshCutoff;
+        const endDate = new Date(startDate.getTime() + (a.moving_time || 0) * 1000);
+        return startDate >= refreshCutoff && endDate <= competitionCutoff;
       });
 
       console.log(
-        `🧭 ${profile.user_id}: Refreshing ${freshStrava.length} activities after cutoff (${refreshCutoff.toISOString().split("T")[0]})`
+        `🧭 ${profile.user_id}: Refreshing ${freshStrava.length} activities between ${refreshCutoff.toISOString().split("T")[0]} and cutoff ${competitionCutoff.toISOString()}`
       );
 
       if (freshStrava.length === 0) continue; // nothing new to update
