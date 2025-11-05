@@ -18,7 +18,7 @@ export default function DashboardPage() {
   const searchParams = useSearchParams();
 
   // 🧭 Detect Guest Mode
-  const isGuest = searchParams.get("guest") === "true";
+  const isGuest = searchParams?.get?.("guest") === "true";
 
   useEffect(() => {
     async function loadProfile() {
