@@ -12,9 +12,16 @@ export function Header() {
   const [countdown, setCountdown] = useState("");
   const [eventEnded, setEventEnded] = useState(false);
 
+  // ✅ Detect guest mode through URL param
+  const isGuest =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("guest") === "true";
+
   useEffect(() => {
     async function fetchProfile() {
       try {
+        if (isGuest) return; // ⛔ Skip fetching profile for guest mode
+
         const res = await fetch("/api/profile");
         if (!res.ok) return;
         const profile = await res.json();
@@ -29,7 +36,7 @@ export function Header() {
       }
     }
     fetchProfile();
-  }, []);
+  }, [isGuest]);
 
   // 🎯 Countdown timer to 10 PM IST today (31 Oct 2025)
   useEffect(() => {
@@ -70,45 +77,51 @@ export function Header() {
       {/* 🔷 Header Bar */}
       <header className="flex items-center justify-between px-4 py-3 bg-blue-900 text-white shadow-md fixed top-0 left-0 right-0 z-40">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="p-2 rounded hover:bg-blue-800"
-          >
-            <Menu size={22} />
-          </button>
+
+          {/* 🍔 Hide hamburger in guest mode */}
+          {!isGuest && (
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 rounded hover:bg-blue-800"
+            >
+              <Menu size={22} />
+            </button>
+          )}
 
           <img src="/logo.png" alt="App Logo" className="w-8 h-8 rounded" />
           <h1 className="text-lg font-semibold">AAP – Move-Athon-Mania</h1>
         </div>
 
-        {/* Profile Button */}
-        <div className="relative">
-          <button
-            onClick={() => setMenuOpen((prev) => !prev)}
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-white text-black font-bold shadow"
-          >
-            {initials || "?"}
-          </button>
+        {/* 👤 Hide Profile Button in guest mode */}
+        {!isGuest && (
+          <div className="relative">
+            <button
+              onClick={() => setMenuOpen((prev) => !prev)}
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-white text-black font-bold shadow"
+            >
+              {initials || "?"}
+            </button>
 
-          {menuOpen && (
-            <div className="absolute right-0 mt-2 w-56 bg-white text-black rounded-lg shadow-lg p-4 z-50">
-              <p className="font-semibold mb-2">
-                {profile?.first_name} {profile?.last_name}
-              </p>
+            {menuOpen && (
+              <div className="absolute right-0 mt-2 w-56 bg-white text-black rounded-lg shadow-lg p-4 z-50">
+                <p className="font-semibold mb-2">
+                  {profile?.first_name} {profile?.last_name}
+                </p>
 
-              {profile?.strava_connected ? (
-                <p className="text-green-600 font-medium">✅ Connected to Strava</p>
-              ) : (
-                <button
-                  onClick={handleConnectStrava}
-                  className="block w-full text-center bg-pink-600 text-white px-3 py-2 rounded-lg hover:bg-pink-700"
-                >
-                  Connect to Strava
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+                {profile?.strava_connected ? (
+                  <p className="text-green-600 font-medium">✅ Connected to Strava</p>
+                ) : (
+                  <button
+                    onClick={handleConnectStrava}
+                    className="block w-full text-center bg-pink-600 text-white px-3 py-2 rounded-lg hover:bg-pink-700"
+                  >
+                    Connect to Strava
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </header>
 
       {/* 🟧 Announcement Bar with Centered Countdown */}
@@ -127,12 +140,14 @@ export function Header() {
 
       <div className="h-[35px]" />
 
-      {/* 🧭 Stats Drawer */}
-      <UserStatsDrawer
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        userId={profile?.user_id || null}
-      />
+      {/* 🧭 Stats Drawer (Hidden in guest mode) */}
+      {!isGuest && (
+        <UserStatsDrawer
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          userId={profile?.user_id || null}
+        />
+      )}
     </>
   );
 }

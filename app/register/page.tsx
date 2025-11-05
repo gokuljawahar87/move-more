@@ -54,14 +54,20 @@ export default function RegisterPage() {
     }
   };
 
+  // 🧭 NEW — Handle “View as Guest” button
+  const handleGuestAccess = () => {
+    router.push("/?guest=true");
+  };
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-[#0A1633]">
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h1 className="text-xl font-bold text-center text-[#0A1633] mb-4">
+      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md text-center">
+        <h1 className="text-xl font-bold text-[#0A1633] mb-4">
           AAP – Move-Athon-Mania <br />
           Employee Registration
         </h1>
-        <form onSubmit={handleRegister} className="space-y-4">
+
+        <form onSubmit={handleRegister} className="space-y-4 text-left">
           <input
             type="text"
             name="user_id"
@@ -101,11 +107,24 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded font-medium"
           >
             {loading ? "Registering..." : "Register"}
           </button>
         </form>
+
+        {/* 👀 NEW Guest Access Button */}
+        <div className="mt-6 border-t border-gray-300 pt-4">
+          <p className="text-gray-600 text-sm mb-2">
+            Want to explore without registering?
+          </p>
+          <button
+            onClick={handleGuestAccess}
+            className="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 rounded font-medium transition-all"
+          >
+            👀 View as Guest
+          </button>
+        </div>
       </div>
     </div>
   );
