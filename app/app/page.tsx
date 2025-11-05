@@ -9,24 +9,24 @@ import { Header } from "@/components/Header";
 import StatsPage from "./stats/page";
 import SuspiciousActivitiesPage from "../suspicious-activities/page";
 import BottomNav from "@/components/BottomNav";
+import { Suspense } from "react";
 
-export default function AppPage() {
+function AppContent() {
   const [activeTab, setActiveTab] = useState<
     "activities" | "leaderboard" | "teams" | "stats" | "suspicious"
   >("activities");
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
-
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    const guestMode = searchParams?.get?.("guest") === "true";
+    const guestMode = searchParams?.get("guest") === "true";
     setIsGuest(guestMode);
 
     async function checkProfile() {
       if (guestMode) {
-        // 👀 Guest mode - allow immediate access, no login required
+        console.log("🟡 Guest mode active — skipping profile fetch");
         localStorage.removeItem("user_id");
         setLoading(false);
         return;
@@ -34,16 +34,34 @@ export default function AppPage() {
 
       try {
         const res = await fetch("/api/profile");
-        const profile = await res.json();
+        if (!res.ok) throw new Error("Profile not found");
 
-        if (!profile?.user_id) throw new Error("No profile found");
+        const profile = await res.json();
+        if (!profile || !profile.user_id) throw new Error("No profile found");
+
         localStorage.setItem("user_id", profile.user_id);
       } catch {
-        const savedUser = localStorage.getItem("user_id");
-        if (!savedUser) {
-          router.replace("/register");
-          return;
+        const savedUserId = localStorage.getItem("user_id");
+        if (savedUserId) {
+          try {
+            const restoreRes = await fetch("/api/restore-session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ user_id: savedUserId }),
+            });
+
+            if (restoreRes.ok) {
+              const restored = await restoreRes.json();
+              if (restored?.user_id) {
+                localStorage.setItem("user_id", restored.user_id);
+                setLoading(false);
+                return;
+              }
+            }
+          } catch {}
         }
+
+        router.replace("/register");
       } finally {
         setLoading(false);
       }
@@ -60,15 +78,12 @@ export default function AppPage() {
     );
   }
 
-  /* ---------------------------
-     🟡 GUEST MODE (READ-ONLY)
-  ----------------------------*/
+  // ⭐ Guest UI
   if (isGuest) {
     return (
       <div className="flex flex-col min-h-screen bg-blue-950 text-white">
         <Header isGuest />
 
-        {/* Banner */}
         <div className="bg-yellow-500 text-black py-2 text-sm font-semibold text-center shadow-md">
           👀 Viewing as Guest – Read-only mode
         </div>
@@ -80,7 +95,7 @@ export default function AppPage() {
           {activeTab === "stats" && <StatsPage />}
           {activeTab === "suspicious" && (
             <div className="mt-10 text-blue-200 text-center">
-              🚫 Suspicious activities are hidden in guest mode
+              🚫 Suspicious Activities are not visible in Guest Mode
             </div>
           )}
         </div>
@@ -99,9 +114,7 @@ export default function AppPage() {
     );
   }
 
-  /* ---------------------------
-     👤 NORMAL USER MODE
-  ----------------------------*/
+  // 🎯 Normal User UI
   return (
     <div className="flex flex-col min-h-screen bg-blue-950 text-white">
       <Header />
@@ -116,5 +129,13 @@ export default function AppPage() {
 
       <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
     </div>
+  );
+}
+
+export default function AppPage() {
+  return (
+    <Suspense fallback={<div className="text-white text-center p-6">Loading...</div>}>
+      <AppContent />
+    </Suspense>
   );
 }
