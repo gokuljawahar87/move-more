@@ -95,16 +95,16 @@ export default function AppPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto pb-32 pt-16 px-2 sm:px-6">
-          {activeTab === "activities" && <Activities isGuest={true} />}
-          {activeTab === "leaderboard" && <Leaderboard />}
-          {activeTab === "teams" && <TeamPerformance />}
-          {activeTab === "stats" && <StatsPage />}
-          {activeTab === "suspicious" && (
-            <div className="mt-10 text-blue-200 text-center">
-              🚫 Suspicious Activities are not visible in Guest Mode
-            </div>
-          )}
-        </div>
+  {activeTab === "activities" && <Activities />}
+  {activeTab === "leaderboard" && <Leaderboard />}
+  {activeTab === "teams" && <TeamPerformance />}
+  {activeTab === "stats" && <StatsPage />}
+  {activeTab === "suspicious" && (
+    <div className="mt-10 text-blue-200 text-center">
+      🚫 Suspicious Activities are not visible in Guest Mode
+    </div>
+  )}
+</div>
 
         <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
 
