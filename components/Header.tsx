@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Menu } from "lucide-react";
 import UserStatsDrawer from "./UserStatsDrawer";
 
-export function Header() {
+export function Header({ isGuest = false }: { isGuest?: boolean }) {
   const [initials, setInitials] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -12,16 +12,11 @@ export function Header() {
   const [countdown, setCountdown] = useState("");
   const [eventEnded, setEventEnded] = useState(false);
 
-  // ✅ Detect guest mode through URL param
-  const isGuest =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("guest") === "true";
-
   useEffect(() => {
+    if (isGuest) return; // 👈 Skip fetching profile in guest mode
+
     async function fetchProfile() {
       try {
-        if (isGuest) return; // ⛔ Skip fetching profile for guest mode
-
         const res = await fetch("/api/profile");
         if (!res.ok) return;
         const profile = await res.json();
@@ -38,12 +33,11 @@ export function Header() {
     fetchProfile();
   }, [isGuest]);
 
-  // 🎯 Countdown timer to 10 PM IST today (31 Oct 2025)
+  // ⏳ Countdown to 10 PM IST Today
   useEffect(() => {
     const target = new Date("2025-10-31T22:00:00+05:30").getTime();
-
     const interval = setInterval(() => {
-      const now = new Date().getTime();
+      const now = Date.now();
       const diff = target - now;
 
       if (diff <= 0) {
@@ -77,22 +71,21 @@ export function Header() {
       {/* 🔷 Header Bar */}
       <header className="flex items-center justify-between px-4 py-3 bg-blue-900 text-white shadow-md fixed top-0 left-0 right-0 z-40">
         <div className="flex items-center gap-3">
-
-          {/* 🍔 Hide hamburger in guest mode */}
-          {!isGuest && (
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="p-2 rounded hover:bg-blue-800"
-            >
-              <Menu size={22} />
-            </button>
-          )}
+          {/* In guest mode, disable drawer */}
+          <button
+            onClick={() => !isGuest && setSidebarOpen(true)}
+            className={`p-2 rounded ${
+              isGuest ? "opacity-40 cursor-not-allowed" : "hover:bg-blue-800"
+            }`}
+          >
+            <Menu size={22} />
+          </button>
 
           <img src="/logo.png" alt="App Logo" className="w-8 h-8 rounded" />
           <h1 className="text-lg font-semibold">AAP – Move-Athon-Mania</h1>
         </div>
 
-        {/* 👤 Hide Profile Button in guest mode */}
+        {/* Profile Button (hidden in guest mode) */}
         {!isGuest && (
           <div className="relative">
             <button
@@ -124,12 +117,11 @@ export function Header() {
         )}
       </header>
 
-      {/* 🟧 Announcement Bar with Centered Countdown */}
+      {/* 🟧 Announcement Bar */}
       <div className="fixed top-[56px] left-0 right-0 bg-orange-600 text-white text-sm font-semibold h-[32px] flex items-center justify-center z-30 shadow-md text-center px-4">
         {!eventEnded ? (
           <span>
-            🏁 Event Ends Today — Time Left:{" "}
-            <strong className="text-white">{countdown}</strong> ⏰
+            🏁 Event Ends Today — Time Left: <strong>{countdown}</strong> ⏰
           </span>
         ) : (
           <span className="text-white animate-pulse">
@@ -140,7 +132,7 @@ export function Header() {
 
       <div className="h-[35px]" />
 
-      {/* 🧭 Stats Drawer (Hidden in guest mode) */}
+      {/* 🧭 Stats Drawer (disabled in guest mode) */}
       {!isGuest && (
         <UserStatsDrawer
           isOpen={sidebarOpen}
