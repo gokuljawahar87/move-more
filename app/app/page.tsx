@@ -15,18 +15,18 @@ export default function AppPage() {
     "activities" | "leaderboard" | "teams" | "stats" | "suspicious"
   >("activities");
   const [loading, setLoading] = useState(true);
-  const [isGuest, setIsGuest] = useState(false);
-  const router = useRouter();
+
   const searchParams = useSearchParams();
+  const guestMode = searchParams?.get("guest") === "true";
+  const [isGuest, setIsGuest] = useState(guestMode);
+
+  const router = useRouter();
 
   useEffect(() => {
-    const guestMode = searchParams.get("guest") === "true";
-    setIsGuest(guestMode);
-
     async function checkProfile() {
+      // 👀 Guest Mode: Skip profile session logic
       if (guestMode) {
-        // 👀 Guest Mode: Skip profile fetch and redirect
-        console.log("🟡 Guest mode active — skipping profile fetch");
+        console.log("🟡 Guest mode active — skipping profile session check");
         localStorage.removeItem("user_id");
         setLoading(false);
         return;
@@ -60,12 +60,11 @@ export default function AppPage() {
                 return;
               }
             }
-          } catch (restoreErr) {
-            console.error("Restore session failed:", restoreErr);
+          } catch (err) {
+            console.error("Restore session failed:", err);
           }
         }
 
-        // ❌ Redirect only if not guest
         router.replace("/register");
       } finally {
         setLoading(false);
@@ -73,7 +72,7 @@ export default function AppPage() {
     }
 
     checkProfile();
-  }, [router, searchParams]);
+  }, [router, guestMode]);
 
   if (loading) {
     return (
@@ -83,22 +82,20 @@ export default function AppPage() {
     );
   }
 
-// 👀 Guest Mode UI (read-only)
-if (isGuest) {
-  return (
-    <div className="flex flex-col min-h-screen bg-blue-950 text-white">
-      {/* Header */}
-      <Header />
+  /* -------------------------------------------
+     👀 Guest Mode UI (Read-Only)
+  --------------------------------------------*/
+  if (isGuest) {
+    return (
+      <div className="flex flex-col min-h-screen bg-blue-950 text-white">
+        <Header />
 
-      {/* Centered Banner */}
-      <div className="bg-yellow-500 text-black py-2 text-sm font-semibold text-center shadow-md">
-        👀 Viewing as Guest – Read-only mode
-      </div>
+        <div className="bg-yellow-500 text-black py-2 text-sm font-semibold text-center shadow-md">
+          👀 Viewing as Guest – Read-only mode
+        </div>
 
-      {/* Main content */}
-      <div className="flex-1 overflow-y-auto pb-32 pt-16">
-        <div className="px-2 sm:px-6">
-          {activeTab === "activities" && <Activities />}
+        <div className="flex-1 overflow-y-auto pb-32 pt-16 px-2 sm:px-6">
+          {activeTab === "activities" && <Activities isGuest={true} />}
           {activeTab === "leaderboard" && <Leaderboard />}
           {activeTab === "teams" && <TeamPerformance />}
           {activeTab === "stats" && <StatsPage />}
@@ -108,31 +105,28 @@ if (isGuest) {
             </div>
           )}
         </div>
+
+        <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+
+        <div className="py-3 text-xs text-blue-300 text-center border-t border-blue-800">
+          <button
+            className="underline text-blue-400 hover:text-blue-300"
+            onClick={() => router.push("/register")}
+          >
+            Back to Employee Login
+          </button>
+        </div>
       </div>
+    );
+  }
 
-      {/* Bottom Navigation */}
-      <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
-
-      {/* Footer */}
-      <div className="py-3 text-xs text-blue-300 text-center border-t border-blue-800">
-        <button
-          className="underline text-blue-400 hover:text-blue-300"
-          onClick={() => router.push("/register")}
-        >
-          Back to Employee Login
-        </button>
-      </div>
-    </div>
-  );
-}
-
-  // 👤 Normal Registered User UI
+  /* -------------------------------------------
+     👤 Normal Registered User UI
+  --------------------------------------------*/
   return (
     <div className="flex flex-col min-h-screen bg-blue-950 text-white">
-      {/* Header */}
       <Header />
 
-      {/* Main content */}
       <div className="flex-1 overflow-y-auto pb-32 pt-16">
         {activeTab === "activities" && <Activities />}
         {activeTab === "leaderboard" && <Leaderboard />}
@@ -141,7 +135,6 @@ if (isGuest) {
         {activeTab === "suspicious" && <SuspiciousActivitiesPage />}
       </div>
 
-      {/* Bottom Navigation */}
       <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
     </div>
   );
