@@ -74,7 +74,7 @@ export default function AppPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto pb-32 pt-16 px-2 sm:px-6">
-          {activeTab === "activities" && <Activities isGuest />}
+          {activeTab === "activities" && <Activities />}
           {activeTab === "leaderboard" && <Leaderboard />}
           {activeTab === "teams" && <TeamPerformance />}
           {activeTab === "stats" && <StatsPage />}
