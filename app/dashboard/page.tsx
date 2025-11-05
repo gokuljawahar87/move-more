@@ -1,73 +1,51 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import toast from "react-hot-toast";
 
-type Profile = {
-  first_name?: string;
-  last_name?: string;
-  team?: string;
-  strava_id?: string | null;
-  user_id?: string;
-};
-
-export default function DashboardPage() {
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // 🧭 Detect Guest Mode
-  const isGuest = searchParams?.get?.("guest") === "true";
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  // ✅ Detect guest mode (just like the app page)
+  const isGuest = searchParams?.get("guest") === "true";
 
   useEffect(() => {
     async function loadProfile() {
+      if (isGuest) {
+        // Guest mode → skip fetching & go straight to app guest view
+        router.replace("/app?guest=true");
+        return;
+      }
+
       try {
         const res = await fetch("/api/profile");
-        if (res.ok) {
-          const data = await res.json();
-          setProfile(data);
+        if (!res.ok) throw new Error("No profile");
+        const data = await res.json();
+        setProfile(data);
 
-          // 🚀 If already connected to Strava, go straight to /app
-          if (data?.strava_id && !isGuest) {
-            router.push("/app");
-          }
-        } else if (isGuest) {
-          // 👀 Fallback guest profile
-          setProfile({
-            user_id: "guest",
-            first_name: "Guest",
-            last_name: "Viewer",
-            team: "—",
-          });
+        // If they already connected Strava → jump to app
+        if (data?.strava_id) {
+          router.push("/app");
         }
-      } catch {
-        if (isGuest) {
-          setProfile({
-            user_id: "guest",
-            first_name: "Guest",
-            last_name: "Viewer",
-            team: "—",
-          });
-        }
+      } catch (err) {
+        // No profile → send to Register
+        router.replace("/register");
       } finally {
         setLoading(false);
       }
     }
-
     loadProfile();
   }, [router, isGuest]);
 
   const handleConnectToStrava = () => {
-    const userId = localStorage.getItem("user_id");
-    if (!userId) {
-      alert("User ID missing — please re-register or refresh.");
-      return;
-    }
-
-    window.location.href = `/api/strava/connect?user_id=${encodeURIComponent(
-      userId
-    )}`;
+    const userId = profile?.user_id;
+    if (!userId) return toast.error("Missing user ID");
+    window.location.href = `/api/strava/connect?user_id=${encodeURIComponent(userId)}`;
   };
 
   if (loading) {
@@ -86,32 +64,6 @@ export default function DashboardPage() {
     );
   }
 
-  // 👀 Guest Mode View
-  if (isGuest || profile.user_id === "guest") {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-blue-950 text-white text-center p-6">
-        <div className="bg-blue-900 p-8 rounded-2xl shadow-lg max-w-lg w-full">
-          <h1 className="text-2xl font-bold mb-2">👋 Welcome, Guest!</h1>
-          <p className="text-blue-200 mb-4">
-            You’re viewing the Move-Athon Mania dashboard in <b>Visitor Mode</b>.
-            Explore the leaderboard, team stats, and performance summaries.
-          </p>
-          <button
-            onClick={() => router.push("/app?guest=true")}
-            className="inline-block px-6 py-2 bg-yellow-500 hover:bg-yellow-400 rounded-lg font-medium text-black transition-all"
-          >
-            View App as Guest →
-          </button>
-
-          <p className="text-xs text-blue-300 mt-4">
-            (Some features like Strava sync and activity validation are disabled.)
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // 👤 Normal Registered User View
   return (
     <div className="flex items-center justify-center min-h-screen bg-blue-950 text-white">
       <div className="bg-blue-900 p-8 rounded-2xl shadow-lg text-center">
@@ -134,5 +86,13 @@ export default function DashboardPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="text-white p-8">Loading...</div>}>
+      <DashboardContent />
+    </Suspense>
   );
 }
