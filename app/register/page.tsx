@@ -54,10 +54,10 @@ export default function RegisterPage() {
     }
   };
 
-  // 🧭 NEW — Handle “View as Guest” button
-  const handleGuestAccess = () => {
-    router.push("/?guest=true");
-  };
+// 🧭 NEW — Handle “View as Guest” button
+const handleGuestAccess = () => {
+  router.push("/app?guest=true"); // ✅ Go straight to guest app view
+};
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-[#0A1633]">
