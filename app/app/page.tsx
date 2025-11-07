@@ -84,9 +84,10 @@ function AppContent() {
       <div className="flex flex-col min-h-screen bg-blue-950 text-white">
         <Header isGuest />
 
-        <div className="bg-yellow-500 text-black py-2 text-sm font-semibold text-center shadow-md">
-          👀 Viewing as Guest – Read-only mode
-        </div>
+{/* Guest Mode Banner - pushed below event bar */}
+<div className="mt-[88px] bg-yellow-500 text-black py-2 text-sm font-semibold text-center shadow-md">
+  👀 Viewing as Guest – Read-only mode
+</div>
 
         <div className="flex-1 overflow-y-auto pb-32 pt-16 px-2 sm:px-6">
           {activeTab === "activities" && <Activities />}
