@@ -78,42 +78,46 @@ function AppContent() {
     );
   }
 
-  // ⭐ Guest UI
-  if (isGuest) {
-    return (
-      <div className="flex flex-col min-h-screen bg-blue-950 text-white">
-        <Header isGuest />
+// ⭐ Guest UI
+if (isGuest) {
+  return (
+    <div className="flex flex-col min-h-screen bg-blue-950 text-white">
+      <Header isGuest />
 
-{/* Guest Mode Banner - pushed below event bar */}
-<div className="mt-[88px] bg-yellow-500 text-black py-2 text-sm font-semibold text-center shadow-md">
-  👀 Viewing as Guest – Read-only mode
-</div>
-
-        <div className="flex-1 overflow-y-auto pb-32 pt-16 px-2 sm:px-6">
-          {activeTab === "activities" && <Activities />}
-          {activeTab === "leaderboard" && <Leaderboard />}
-          {activeTab === "teams" && <TeamPerformance />}
-          {activeTab === "stats" && <StatsPage />}
-          {activeTab === "suspicious" && (
-            <div className="mt-10 text-blue-200 text-center">
-              🚫 Suspicious Activities are not visible in Guest Mode
-            </div>
-          )}
-        </div>
-
-        <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
-
-        <div className="py-3 text-xs text-blue-300 text-center border-t border-blue-800">
-          <button
-            className="underline text-blue-400 hover:text-blue-300"
-            onClick={() => router.push("/register")}
-          >
-            Back to Employee Login
-          </button>
-        </div>
+      {/* Guest Mode Banner - fixed below header */}
+      <div className="fixed top-[56px] left-0 right-0 bg-yellow-500 text-black py-2 text-sm font-semibold text-center shadow-md z-30">
+        👀 Viewing as Guest – Read-only mode
       </div>
-    );
-  }
+
+      {/* Spacer */}
+      <div className="h-[32px]" />
+
+      <div className="flex-1 overflow-y-auto pb-32 pt-24 px-2 sm:px-6">
+        {activeTab === "activities" && <Activities />}
+        {activeTab === "leaderboard" && <Leaderboard />}
+        {activeTab === "teams" && <TeamPerformance />}
+        {activeTab === "stats" && <StatsPage />}
+        {activeTab === "suspicious" && (
+          <div className="mt-10 text-blue-200 text-center">
+            🚫 Suspicious Activities are not visible in Guest Mode
+          </div>
+        )}
+      </div>
+
+      <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+
+      <div className="py-3 text-xs text-blue-300 text-center border-t border-blue-800">
+        <button
+          className="underline text-blue-400 hover:text-blue-300"
+          onClick={() => router.push("/register")}
+        >
+          Back to Employee Login
+        </button>
+      </div>
+    </div>
+  );
+}
+
 
   // 🎯 Normal User UI
   return (
