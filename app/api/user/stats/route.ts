@@ -120,7 +120,7 @@ export async function GET(req: Request) {
 
         if (type === "Run" || type === "TrailRun") {
           run += km;
-          points += km * 25;
+          points += km * 22;
         } else if (type === "Walk" || type === "Reclassified-Walk") {
           walk += km;
           points += km * 14;
