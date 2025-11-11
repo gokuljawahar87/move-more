@@ -22,10 +22,10 @@ export default function Stats({
   running_distance,
   walking_distance,
 }: StatsProps) {
-  const totalKm = (total_distance / 1000).toFixed(1);
-  const cyclingKm = (cycling_distance / 1000).toFixed(1);
-  const runningKm = (running_distance / 1000).toFixed(1);
-  const walkingKm = (walking_distance / 1000).toFixed(1);
+ const totalKm = total_distance.toFixed(1);
+const cyclingKm = cycling_distance.toFixed(1);
+const runningKm = running_distance.toFixed(1);
+const walkingKm = walking_distance.toFixed(1);
 
   const steps = Math.round(Number(walkingKm) * 1312); // approx steps per km
   const co2Saved = (Number(totalKm) * 0.21).toFixed(1); // kg CO2 saved per km
