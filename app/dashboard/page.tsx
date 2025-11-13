@@ -2,7 +2,6 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import toast from "react-hot-toast";
 
 function DashboardContent() {
   const router = useRouter();
@@ -11,47 +10,74 @@ function DashboardContent() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Detect guest mode (just like the app page)
   const isGuest = searchParams?.get("guest") === "true";
 
   useEffect(() => {
     async function loadProfile() {
       if (isGuest) {
-        // Guest mode → skip fetching & go straight to app guest view
         router.replace("/app?guest=true");
         return;
       }
 
       try {
         const res = await fetch("/api/profile");
-        if (!res.ok) throw new Error("No profile");
         const data = await res.json();
+
+        // ❗ Not part of AAP Team
+        if (data?.not_employee) {
+          setProfile({ not_employee: true });
+          setLoading(false);
+          return;
+        }
+
+        // No profile at all
+        if (!data?.user_id) {
+          router.replace("/register");
+          return;
+        }
+
         setProfile(data);
 
-        // If they already connected Strava → jump to app
-        if (data?.strava_id) {
+        // If profile has Strava connected → go to full app
+        if (data?.strava_connected) {
           router.push("/app");
         }
-      } catch (err) {
-        // No profile → send to Register
+      } catch {
         router.replace("/register");
       } finally {
         setLoading(false);
       }
     }
+
     loadProfile();
   }, [router, isGuest]);
-
-  const handleConnectToStrava = () => {
-    const userId = profile?.user_id;
-    if (!userId) return toast.error("Missing user ID");
-    window.location.href = `/api/strava/connect?user_id=${encodeURIComponent(userId)}`;
-  };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-blue-950 text-white">
         Loading dashboard...
+      </div>
+    );
+  }
+
+  // ❗ Not part of AAP employee_master
+  if (profile?.not_employee) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-blue-950 text-white p-6 text-center">
+        <div className="bg-blue-900 p-8 rounded-2xl shadow-lg max-w-md">
+          <h1 className="text-2xl font-bold mb-2">Access Restricted</h1>
+          <p className="mb-4">
+            You are not part of the AAP team.<br />
+            Please continue in Guest Mode.
+          </p>
+
+          <button
+            onClick={() => router.replace("/app?guest=true")}
+            className="mt-3 px-6 py-2 bg-yellow-500 hover:bg-yellow-600 text-black rounded-lg font-semibold"
+          >
+            👀 View as Guest
+          </button>
+        </div>
       </div>
     );
   }
@@ -72,17 +98,17 @@ function DashboardContent() {
         </h1>
         <p className="mb-4">Team: {profile.team ?? "Not Assigned"}</p>
 
-        {!profile.strava_id ? (
+        {!profile.strava_connected ? (
           <button
-            onClick={handleConnectToStrava}
+            onClick={() =>
+              (window.location.href = `/api/strava/connect?user_id=${profile.user_id}`)
+            }
             className="inline-block px-6 py-2 bg-orange-500 hover:bg-orange-600 rounded-lg font-medium"
           >
             Connect to Strava
           </button>
         ) : (
-          <p className="text-green-400 font-semibold">
-            Strava already connected ✓ Redirecting...
-          </p>
+          <p className="text-green-400 font-semibold">Strava already connected ✓</p>
         )}
       </div>
     </div>

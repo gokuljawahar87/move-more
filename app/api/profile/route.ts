@@ -5,16 +5,26 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function GET() {
   try {
-    // ✅ Get user_id from cookie
     const cookieStore = await cookies();
     const user_id = cookieStore.get("user_id")?.value;
 
     if (!user_id) {
-      // Return consistent shape instead of hard 401
       return NextResponse.json({ user_id: null });
     }
 
-    // ✅ Fetch profile from Supabase (now includes strava_connected)
+    // Check employee_master first
+    const { data: emp, error: empErr } = await supabaseAdmin
+      .from("employee_master")
+      .select("user_id")
+      .eq("user_id", user_id)
+      .maybeSingle();
+
+    if (empErr || !emp) {
+      console.warn("❗ Not in employee_master:", user_id);
+      return NextResponse.json({ user_id, not_employee: true });
+    }
+
+    // Now fetch profile
     const { data, error } = await supabaseAdmin
       .from("profiles")
       .select("user_id, first_name, last_name, team, strava_connected")
@@ -22,13 +32,16 @@ export async function GET() {
       .single();
 
     if (error) {
-      console.warn("Profile not found in Supabase:", error.message);
-      return NextResponse.json({ user_id: null });
+      console.warn("Profile not found:", error.message);
+      return NextResponse.json({ user_id, not_employee: false, no_profile: true });
     }
 
-    return NextResponse.json(data || { user_id: null });
+    return NextResponse.json(data);
   } catch (err: any) {
     console.error("Profile API error:", err);
-    return NextResponse.json({ error: err.message, user_id: null }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message, user_id: null },
+      { status: 500 }
+    );
   }
 }
