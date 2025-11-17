@@ -117,24 +117,24 @@ export function Header({ isGuest = false }: { isGuest?: boolean }) {
         )}
       </header>
 
-      {/* 🟧 Announcement Bar — HIDDEN IN GUEST MODE */}
-      {!isGuest && (
-        <>
-          <div className="fixed top-[56px] left-0 right-0 bg-orange-600 text-white text-sm font-semibold h-[32px] flex items-center justify-center z-30 shadow-md text-center px-4">
-            {!eventEnded ? (
-              <span>
-                🏁 Event Ends Today — Time Left: <strong>{countdown}</strong> ⏰
-              </span>
-            ) : (
-              <span className="text-white animate-pulse">
-                🛑 The app is closed for points reconciliation
-              </span>
-            )}
-          </div>
-
-          <div className="h-[35px]" />
-        </>
+    {/* 🟧 Announcement Bar — HIDDEN IN GUEST MODE */}
+{!isGuest && (
+  <>
+    <div className="fixed top-[56px] left-0 right-0 bg-orange-600 text-white text-sm font-semibold h-[32px] flex items-center justify-center z-30 shadow-md text-center px-4">
+      {!eventEnded ? (
+        <span>
+          🏁 Event Ends Today — Time Left: <strong>{countdown}</strong> ⏰
+        </span>
+      ) : (
+        <span className="text-white animate-pulse">
+          🛑 Event Closed — Check the new <strong>Champions</strong> tab for winners 🏆
+        </span>
       )}
+    </div>
+
+    <div className="h-[35px]" />
+  </>
+)}
 
       {/* 🧭 Stats Drawer (disabled in guest mode) */}
       {!isGuest && (
