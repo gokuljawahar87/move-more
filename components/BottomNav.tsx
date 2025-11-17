@@ -3,22 +3,29 @@
 import { useEffect, useState } from "react";
 
 type Props = {
-  activeTab: "activities" | "leaderboard" | "teams" | "stats" | "suspicious";
+  activeTab:
+    | "activities"
+    | "leaderboard"
+    | "teams"
+    | "stats"
+    | "championship";
   setActiveTab: (
-    tab: "activities" | "leaderboard" | "teams" | "stats" | "suspicious"
+    tab:
+      | "activities"
+      | "leaderboard"
+      | "teams"
+      | "stats"
+      | "championship"
   ) => void;
 };
 
 export default function BottomNav({ activeTab, setActiveTab }: Props) {
   const [userId, setUserId] = useState<string | null>(null);
-  const SUPER_USERS = ["U262861", "U432088"];
 
   useEffect(() => {
     const storedId = localStorage.getItem("user_id");
     if (storedId) setUserId(storedId);
   }, []);
-
-  const isSuperUser = userId && SUPER_USERS.includes(userId);
 
   return (
     <div className="fixed bottom-4 inset-x-0 flex justify-center z-50">
@@ -39,7 +46,7 @@ export default function BottomNav({ activeTab, setActiveTab }: Props) {
           <span className="text-[10px] mt-0.5">Activities</span>
         </button>
 
-        {/* Leaderboard */}
+        {/* Leaderboard (now podium icon) */}
         <button
           onClick={() => setActiveTab("leaderboard")}
           className={`flex flex-col items-center ${
@@ -47,7 +54,7 @@ export default function BottomNav({ activeTab, setActiveTab }: Props) {
           }`}
         >
           <span className="material-symbols-outlined text-[20px] leading-none">
-            emoji_events
+            podium
           </span>
           <span className="text-[10px] mt-0.5">Leaderboard</span>
         </button>
@@ -78,20 +85,18 @@ export default function BottomNav({ activeTab, setActiveTab }: Props) {
           <span className="text-[10px] mt-0.5">Stats</span>
         </button>
 
-        {/* Suspicious Activities (Only for Super Users) */}
-        {isSuperUser && (
-          <button
-            onClick={() => setActiveTab("suspicious")}
-            className={`flex flex-col items-center ${
-              activeTab === "suspicious" ? "text-red-600" : "text-gray-600"
-            }`}
-          >
-            <span className="material-symbols-outlined text-[20px] leading-none">
-              warning
-            </span>
-            <span className="text-[10px] mt-0.5">Suspicious</span>
-          </button>
-        )}
+        {/* Championship Dashboard */}
+        <button
+          onClick={() => setActiveTab("championship")}
+          className={`flex flex-col items-center ${
+            activeTab === "championship" ? "text-red-600" : "text-gray-600"
+          }`}
+        >
+          <span className="material-symbols-outlined text-[20px] leading-none">
+            emoji_events
+          </span>
+          <span className="text-[10px] mt-0.5">Champions</span>
+        </button>
       </div>
     </div>
   );
