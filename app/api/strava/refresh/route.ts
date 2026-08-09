@@ -1,168 +1,194 @@
+// app/api/strava/refresh/route.ts
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin"; // ⬅️ was the anon client; writes need service role
 
-// Challenge start date
-const challengeStart = new Date("2025-10-01T00:00:00+05:30");
-const challengeStartEpoch = Math.floor(challengeStart.getTime() / 1000);
+export const dynamic = "force-dynamic";
+export const maxDuration = 60; // Strava sync across all users can be slow
 
-// ⏳ Freeze cutoff date — do NOT touch activities before this date
-const refreshCutoff = new Date("2025-10-29T00:00:00+05:30");
+// ─────────────────────────────────────────────────────────────────────
+// 🗓️  SYNC WINDOW  — see refresh-user/route.ts for the full explanation.
+// The old 2025-10-29 / 2025-10-31 cutoffs meant this route silently
+// synced nothing. Replaced with a rolling lookback for the smoke test.
+// ─────────────────────────────────────────────────────────────────────
 
-// 🚫 End of competition cutoff — ignore anything beyond this time
-const competitionCutoff = new Date("2025-10-31T22:00:00+05:30"); // 10 PM IST
+const TEST_LOOKBACK_DAYS = 30;
 
-export async function POST() {
-  try {
-    const { data: profiles, error: fetchError } = await supabase
-      .from("profiles")
-      .select(
-        "user_id, strava_access_token, strava_refresh_token, strava_token_expires_at"
-      );
+const SYNC_START = new Date(
+  Date.now() - TEST_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+);
+const SYNC_END: Date | null = null; // null = no upper bound
 
-    if (fetchError) throw fetchError;
-    if (!profiles?.length) {
-      return NextResponse.json({ error: "No connected users" }, { status: 400 });
-    }
+// Set to false while testing — when true, activities that vanished from
+// Strava get deleted locally. Risky to leave on during a trial run.
+const ENABLE_DELETIONS = false;
 
-    let refreshedUsers = 0;
-    let cleanedUsers = 0;
+async function runRefresh() {
+  const { data: profiles, error: fetchError } = await supabaseAdmin
+    .from("profiles")
+    .select(
+      "user_id, strava_access_token, strava_refresh_token, strava_token_expires_at"
+    );
 
-    for (const profile of profiles) {
-      if (!profile.strava_refresh_token) continue;
-      let accessToken = profile.strava_access_token;
+  if (fetchError) throw fetchError;
+  if (!profiles?.length) {
+    return { refreshedUsers: 0, cleanedUsers: 0, note: "No profiles found" };
+  }
 
-      // 🔁 Refresh token if expired
-      const now = Math.floor(Date.now() / 1000);
-      if (!accessToken || profile.strava_token_expires_at < now) {
-        const tokenRes = await fetch("https://www.strava.com/oauth/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            client_id: process.env.STRAVA_CLIENT_ID,
-            client_secret: process.env.STRAVA_CLIENT_SECRET,
-            grant_type: "refresh_token",
-            refresh_token: profile.strava_refresh_token,
-          }),
-        });
+  let refreshedUsers = 0;
+  let cleanedUsers = 0;
+  let totalUpserted = 0;
+  const failures: { user_id: string; reason: string }[] = [];
 
-        if (!tokenRes.ok) continue;
+  for (const profile of profiles) {
+    if (!profile.strava_refresh_token) continue;
 
-        const tokenData = await tokenRes.json();
-        accessToken = tokenData.access_token;
+    let accessToken = profile.strava_access_token;
+    const now = Math.floor(Date.now() / 1000);
 
-        await supabase
-          .from("profiles")
-          .update({
-            strava_access_token: tokenData.access_token,
-            strava_refresh_token: tokenData.refresh_token,
-            strava_token_expires_at: tokenData.expires_at,
-          })
-          .eq("user_id", profile.user_id);
-      }
-
-      if (!accessToken) continue;
-
-      // 🗂 Fetch all Strava activities since challenge start
-      let page = 1;
-      let allActivities: any[] = [];
-      let keepFetching = true;
-
-      while (keepFetching) {
-        const url = `https://www.strava.com/api/v3/athlete/activities?after=${challengeStartEpoch}&per_page=200&page=${page}`;
-        const res = await fetch(url, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        if (!res.ok) break;
-
-        const batch = await res.json();
-        if (batch.length > 0) {
-          allActivities.push(...batch);
-          page++;
-        } else keepFetching = false;
-      }
-
-      // 🧹 Remove manual uploads
-      let freshStrava = allActivities.filter((a: any) => !a.manual);
-
-      // 🛡️ Cutoff protection — include only activities after refresh cutoff AND before competition cutoff
-      freshStrava = freshStrava.filter((a: any) => {
-        const startDate = new Date(a.start_date);
-        const endDate = new Date(startDate.getTime() + (a.moving_time || 0) * 1000);
-        return startDate >= refreshCutoff && endDate <= competitionCutoff;
+    // ── Refresh token if expired ───────────────────────────────────
+    if (
+      !accessToken ||
+      !profile.strava_token_expires_at ||
+      profile.strava_token_expires_at < now
+    ) {
+      const tokenRes = await fetch("https://www.strava.com/oauth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_id: process.env.STRAVA_CLIENT_ID,
+          client_secret: process.env.STRAVA_CLIENT_SECRET,
+          grant_type: "refresh_token",
+          refresh_token: profile.strava_refresh_token,
+        }),
       });
 
-      console.log(
-        `🧭 ${profile.user_id}: Refreshing ${freshStrava.length} activities between ${refreshCutoff.toISOString().split("T")[0]} and cutoff ${competitionCutoff.toISOString()}`
-      );
+      if (!tokenRes.ok) {
+        // ⬇️ Old code did a silent `continue` here — you could never tell
+        // whether a user failed or simply had nothing new.
+        failures.push({
+          user_id: profile.user_id,
+          reason: `token_refresh_${tokenRes.status}`,
+        });
+        continue;
+      }
 
-      if (freshStrava.length === 0) continue; // nothing new to update
+      const tokenData = await tokenRes.json();
+      accessToken = tokenData.access_token;
 
-      // 📥 Fetch existing activities
-      const { data: existing, error: existingError } = await supabase
-        .from("activities")
-        .select("id, strava_id, is_valid, is_valid_locked, derived_type, start_date")
+      await supabaseAdmin
+        .from("profiles")
+        .update({
+          strava_access_token: tokenData.access_token,
+          strava_refresh_token: tokenData.refresh_token,
+          strava_token_expires_at: tokenData.expires_at,
+        })
         .eq("user_id", profile.user_id);
+    }
 
-      if (existingError) continue;
+    if (!accessToken) continue;
 
-      const existingMap = new Map(
-        (existing || []).map((a) => [
-          String(a.strava_id),
-          {
-            is_valid: a.is_valid,
-            is_valid_locked: a.is_valid_locked,
-            derived_type: a.derived_type,
-            start_date: a.start_date,
-          },
-        ])
+    // ── Pull activities ────────────────────────────────────────────
+    const afterEpoch = Math.floor(SYNC_START.getTime() / 1000);
+    const allActivities: any[] = [];
+    let page = 1;
+
+    while (page <= 10) {
+      const res = await fetch(
+        `https://www.strava.com/api/v3/athlete/activities?after=${afterEpoch}&per_page=200&page=${page}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
       );
 
-      const stravaIds = new Set(freshStrava.map((a: any) => String(a.id)));
+      if (!res.ok) {
+        failures.push({
+          user_id: profile.user_id,
+          reason: `activities_${res.status}`,
+        });
+        break;
+      }
 
-      // ❌ Delete missing Strava activities (only unlocked + after cutoff)
+      const batch = await res.json();
+      if (!Array.isArray(batch) || batch.length === 0) break;
+
+      allActivities.push(...batch);
+      page++;
+    }
+
+    // ── Filter ─────────────────────────────────────────────────────
+    const freshStrava = allActivities.filter((a: any) => {
+      if (a.manual) return false;
+
+      const startDate = new Date(a.start_date);
+      if (startDate < SYNC_START) return false;
+
+      if (SYNC_END) {
+        const endDate = new Date(
+          startDate.getTime() + (a.moving_time || 0) * 1000
+        );
+        if (endDate > SYNC_END) return false;
+      }
+      return true;
+    });
+
+    console.log(
+      `🧭 ${profile.user_id}: ${allActivities.length} from Strava, ${freshStrava.length} in window`
+    );
+
+    if (freshStrava.length === 0) continue;
+
+    // ── Existing rows ──────────────────────────────────────────────
+    const { data: existing, error: existingError } = await supabaseAdmin
+      .from("activities")
+      .select("id, strava_id, is_valid, is_valid_locked, derived_type, start_date")
+      .eq("user_id", profile.user_id);
+
+    if (existingError) {
+      failures.push({ user_id: profile.user_id, reason: "db_read_failed" });
+      continue;
+    }
+
+    const existingMap = new Map(
+      (existing || []).map((a) => [String(a.strava_id), a])
+    );
+
+    // ── Optional cleanup of deleted-on-Strava activities ───────────
+    if (ENABLE_DELETIONS) {
+      const stravaIds = new Set(freshStrava.map((a: any) => String(a.id)));
       const deletedIds = (existing || [])
         .filter(
           (a) =>
             !stravaIds.has(String(a.strava_id)) &&
             !a.is_valid_locked &&
-            new Date(a.start_date) >= refreshCutoff
+            new Date(a.start_date) >= SYNC_START
         )
         .map((a) => a.strava_id);
 
       if (deletedIds.length) {
-        await supabase
+        await supabaseAdmin
           .from("activities")
           .delete()
           .in("strava_id", deletedIds)
           .eq("user_id", profile.user_id);
         cleanedUsers++;
       }
+    }
 
-      // 🧩 Prepare upserts
-      const formatted: any[] = [];
+    // ── Build upserts ──────────────────────────────────────────────
+    const formatted = freshStrava
+      .filter((a: any) => !existingMap.get(String(a.id))?.is_valid_locked)
+      .map((a: any) => {
+        const existingRecord = existingMap.get(String(a.id));
 
-      for (const a of freshStrava) {
-        const km = Number(a.distance || 0) / 1000;
         const paceMinPerKm =
-          a.moving_time > 0
-            ? (a.moving_time / 60) / (a.distance / 1000 || 1)
+          a.moving_time > 0 && a.distance > 0
+            ? a.moving_time / 60 / (a.distance / 1000)
             : 0;
 
-        // ✅ Reclassification logic
         let derivedType = a.type;
-        if (
-          (a.type === "Run" || a.type === "TrailRun") &&
-          paceMinPerKm >= 8.5
-        ) {
+        if ((a.type === "Run" || a.type === "TrailRun") && paceMinPerKm >= 8.5) {
           derivedType = "Reclassified-Walk";
         }
 
-        const existingRecord = existingMap.get(String(a.id));
-
-        // 🚫 Skip if locked
-        if (existingRecord?.is_valid_locked) continue;
-
-        formatted.push({
+        return {
           user_id: profile.user_id,
           strava_id: a.id,
           name: a.name,
@@ -174,34 +200,64 @@ export async function POST() {
           strava_url: `https://www.strava.com/activities/${a.id}`,
           is_valid: existingRecord ? existingRecord.is_valid : true,
           is_valid_locked: existingRecord?.is_valid_locked || false,
-        });
+        };
+      });
+
+    if (formatted.length > 0) {
+      const { error: upsertError } = await supabaseAdmin
+        .from("activities")
+        .upsert(formatted, { onConflict: "strava_id" });
+
+      if (upsertError) {
+        console.error(`❌ Upsert error for ${profile.user_id}:`, upsertError);
+        failures.push({ user_id: profile.user_id, reason: "upsert_failed" });
+        continue;
       }
-
-      if (formatted.length > 0) {
-        const { error: upsertError } = await supabase
-          .from("activities")
-          .upsert(formatted, { onConflict: "strava_id" });
-
-        if (upsertError) {
-          console.error(`❌ Upsert error for ${profile.user_id}:`, upsertError);
-          continue;
-        }
-      }
-
-      refreshedUsers++;
+      totalUpserted += formatted.length;
     }
 
-    // 🕒 Update sync metadata
-    await supabase.from("sync_metadata").upsert({
-      id: 1,
-      last_refreshed_at: new Date().toISOString(),
-    });
+    refreshedUsers++;
+  }
 
-    return NextResponse.json({
-      success: true,
-      refreshedUsers,
-      cleanedUsers,
-    });
+  await supabaseAdmin.from("sync_metadata").upsert({
+    id: 1,
+    last_refreshed_at: new Date().toISOString(),
+  });
+
+  return {
+    refreshedUsers,
+    cleanedUsers,
+    totalUpserted,
+    totalProfiles: profiles.length,
+    failures, // ⬅️ now visible instead of silently swallowed
+  };
+}
+
+// Vercel Cron sends GET requests — the old code only exported POST,
+// so the scheduled sync in vercel.json was returning 405 every time.
+export async function GET(req: Request) {
+  const secret = process.env.CRON_SECRET;
+  if (secret) {
+    const auth = req.headers.get("authorization");
+    if (auth !== `Bearer ${secret}`) {
+      return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
+    }
+  }
+
+  try {
+    const stats = await runRefresh();
+    return NextResponse.json({ success: true, source: "cron", ...stats });
+  } catch (err: any) {
+    console.error("❌ Refresh failed:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+// Manual trigger from the admin button in Activities.tsx
+export async function POST() {
+  try {
+    const stats = await runRefresh();
+    return NextResponse.json({ success: true, source: "manual", ...stats });
   } catch (err: any) {
     console.error("❌ Refresh failed:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
