@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 type LeaderboardEntry = {
   name?: string;
@@ -19,55 +20,91 @@ type LeaderboardData = {
   topFemales?: LeaderboardEntry[];
 };
 
-// ✅ Team logos map
+// ⚠️ Season 2: replace these with the new team names and logo files.
 const teamLogos: Record<string, string> = {
   "THE POWERHOUSE": "/logos/powerhouse.png",
   "Corporate Crusaders": "/logos/crusaders.png",
   "RAC ROCKERS": "/logos/rockers.png",
   "ALPHA SQUAD": "/logos/alpha.png",
   "Black Forest Brigade": "/logos/brigade.png",
-  "RACKETS": "/logos/rackets.png",
+  RACKETS: "/logos/rackets.png",
   "VIBE TRIBE": "/logos/vibe.png",
-  "GOAT": "/logos/goat.png",
+  GOAT: "/logos/goat.png",
 };
 
 export default function Leaderboard() {
-  const [data, setData] = useState<LeaderboardData>({
-    runners: [],
-    walkers: [],
-    cyclers: [],
-    teams: [],
-    topFemales: [],
-  });
+  const [data, setData] = useState<LeaderboardData | null>(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     fetch("/api/leaderboard")
       .then((res) => res.json())
       .then((d) => setData(d))
-      .catch((err) => {
-        console.error("Failed to fetch leaderboard:", err);
-      });
+      .catch(() => setFailed(true));
   }, []);
 
-  return (
-    <div className="p-4 space-y-6 bg-blue-950 min-h-screen text-white">
-      <Section title="🏃 Top Runners" list={data.runners} metric="run" unit="km" />
-      <Section title="🚶 Top Walkers" list={data.walkers} metric="walk" unit="km" />
-      <Section title="🚴 Top Cyclers" list={data.cyclers} metric="cycle" unit="km" />
+  if (failed) {
+    return (
+      <div className="p-8 text-center">
+        <p className="font-display uppercase tracking-wide text-lg">
+          Ranks unavailable
+        </p>
+        <p className="text-sm text-chalk-dim mt-1">
+          The leaderboard didn&apos;t load. Pull down to try again.
+        </p>
+      </div>
+    );
+  }
 
-      {/* 👩‍💼 New Diversity Section */}
+  if (!data) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="animate-spin text-tape" size={22} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 py-5 space-y-8">
       <Section
-        title="👩‍💼 Top Diversity Candidate Performers"
+        label="Runners"
+        note="by distance"
+        list={data.runners}
+        metric="run"
+        unit="km"
+        accent="var(--run)"
+      />
+      <Section
+        label="Walkers"
+        note="by distance"
+        list={data.walkers}
+        metric="walk"
+        unit="km"
+        accent="var(--walk)"
+      />
+      <Section
+        label="Cyclists"
+        note="by distance"
+        list={data.cyclers}
+        metric="cycle"
+        unit="km"
+        accent="var(--cycle)"
+      />
+      <Section
+        label="Women's Podium"
+        note="by points"
         list={data.topFemales || []}
         metric="points"
         unit="pts"
+        accent="var(--tape)"
       />
-
       <Section
-        title="👥 Top Teams"
+        label="Teams"
+        note="by points"
         list={data.teams}
         metric="points"
         unit="pts"
+        accent="var(--tape)"
         isTeam
       />
     </div>
@@ -75,69 +112,97 @@ export default function Leaderboard() {
 }
 
 function Section({
-  title,
+  label,
+  note,
   list,
   metric,
   unit,
+  accent,
   isTeam = false,
 }: {
-  title: string;
+  label: string;
+  note: string;
   list: LeaderboardEntry[];
   metric: "run" | "walk" | "cycle" | "points";
   unit: string;
+  accent: string;
   isTeam?: boolean;
 }) {
-  const getMedal = (rank: number) => {
-    if (rank === 1) return "🥇";
-    if (rank === 2) return "🥈";
-    if (rank === 3) return "🥉";
-    return "";
-  };
-
-  const getCardStyle = (rank: number) => {
-    if (rank === 1) return "border-yellow-400";
-    if (rank === 2) return "border-gray-400";
-    if (rank === 3) return "border-amber-700";
-    return "border-gray-200";
-  };
-
   return (
-    <div>
-      <h2 className="text-lg font-bold mb-3">{title}</h2>
+    <section>
+      <div className="flex items-baseline justify-between mb-2.5 pb-2 border-b border-ink-800">
+        <h2 className="font-display font-700 uppercase tracking-[0.08em] text-xl">
+          {label}
+        </h2>
+        <span className="split text-chalk-dim">{note}</span>
+      </div>
+
       {list && list.length > 0 ? (
         <div className="space-y-2">
           {list.map((item, i) => {
-            const showLogo =
-              isTeam || (i < 3 && item.team && teamLogos[item.team]);
+            const rank = i + 1;
+            const logo = item.team ? teamLogos[item.team] : null;
 
             return (
               <div
                 key={i}
-                className={`bg-white text-gray-900 p-4 rounded-xl shadow flex justify-between items-center border-2 ${getCardStyle(
-                  i + 1
-                )}`}
+                className={`bib bib-${rank} flex items-center gap-3.5 pl-3.5 pr-4 pt-4 pb-3 animate-bib-in`}
+                style={{ animationDelay: `${i * 60}ms` }}
               >
-                <span className="font-medium flex items-center gap-3">
-                  {getMedal(i + 1)}
-                  {showLogo && item.team && (
-                    <img
-                      src={teamLogos[item.team] || "/logos/default.png"}
-                      alt={item.team}
-                      className="w-8 h-8 rounded-full object-cover border"
-                    />
+                {/* Bib number — the signature element */}
+                <div
+                  className="bib-number w-9 shrink-0 text-center"
+                  style={{
+                    color:
+                      rank === 1
+                        ? "var(--gold)"
+                        : rank === 2
+                        ? "var(--silver)"
+                        : "var(--bronze)",
+                  }}
+                >
+                  {rank}
+                </div>
+
+                {logo && (
+                  <img
+                    src={logo}
+                    alt=""
+                    className="w-8 h-8 rounded-full object-cover ring-1 ring-ink-700 shrink-0"
+                  />
+                )}
+
+                <div className="min-w-0 flex-1">
+                  <div className="font-display font-600 uppercase tracking-wide text-[17px] leading-tight truncate">
+                    {isTeam ? item.team : item.name}
+                  </div>
+                  {!isTeam && item.team && (
+                    <div className="split text-chalk-dim truncate mt-0.5">
+                      {item.team}
+                    </div>
                   )}
-                  {isTeam ? item.team : item.name}
-                </span>
-                <span className="font-semibold">
-                  {Number(item[metric] ?? 0).toFixed(1)} {unit}
-                </span>
+                </div>
+
+                <div className="text-right shrink-0">
+                  <span
+                    className="readout text-2xl"
+                    style={{ color: accent }}
+                  >
+                    {Number(item[metric] ?? 0).toFixed(1)}
+                  </span>
+                  <span className="eyebrow text-[9px] ml-1">{unit}</span>
+                </div>
               </div>
             );
           })}
         </div>
       ) : (
-        <p className="text-gray-400 text-sm">No data yet</p>
+        <div className="bib px-4 pt-5 pb-4 text-center">
+          <p className="split text-chalk-dim">
+            Nobody on the board yet — first one here takes it.
+          </p>
+        </div>
       )}
-    </div>
+    </section>
   );
 }

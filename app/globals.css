@@ -1,14 +1,271 @@
-/* app/globals.css */
+/* app/globals.css — Move-Athon Mania, Season 2 "Night Bib" */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Optional: smooth font + dark mode base */
+/* ═══════════════════════════════════════════════════════════════
+   DESIGN TOKENS
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Surfaces — deep plum ink */
+  --ink-950: #150e22; /* page background */
+  --ink-900: #1f1631; /* cards */
+  --ink-800: #2c2145; /* borders, hover */
+  --ink-700: #3d3059; /* dividers */
+
+  /* Type — both raised after the first round of feedback.
+     chalk-dim was #a79ec0 (~4:1), too weak for small labels. Now ~9:1. */
+  --chalk: #f5f3ee;
+  --chalk-dim: #c3bad6;
+
+  /* Single accent */
+  --tape: #ffc93c;
+  --tape-deep: #d99a00;
+
+  /* Activity coding */
+  --run: #ff7b7b;
+  --walk: #5fdcb2;
+  --cycle: #7fb5ff;
+
+  /* Podium */
+  --gold: #ffc93c;
+  --silver: #d4d1dd;
+  --bronze: #d19468;
+
+  --radius: 14px;
+
+  /* Header height — the header and the page padding both read this,
+     so they can't drift apart again. */
+  --header-h: 88px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BASE
+   ═══════════════════════════════════════════════════════════════ */
+
 html {
   scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  @apply bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--ink-950);
+  color: var(--chalk);
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-feature-settings: "tnum" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  top: -30vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 130vw;
+  height: 70vh;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 201, 60, 0.11) 0%,
+    rgba(255, 201, 60, 0.03) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SIGNATURE: the bib card
+   ═══════════════════════════════════════════════════════════════ */
+
+.bib {
+  position: relative;
+  background: var(--ink-900);
+  border: 1px solid var(--ink-800);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.bib::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 14px;
+  right: 14px;
+  height: 3px;
+  background-image: radial-gradient(
+    circle,
+    var(--ink-700) 0 1.5px,
+    transparent 1.6px
+  );
+  background-size: 9px 3px;
+  background-repeat: repeat-x;
+  opacity: 0.85;
+}
+
+.bib-1 {
+  border-color: rgba(255, 201, 60, 0.45);
+  box-shadow: inset 4px 0 0 var(--gold);
+}
+.bib-2 {
+  box-shadow: inset 4px 0 0 var(--silver);
+}
+.bib-3 {
+  box-shadow: inset 4px 0 0 var(--bronze);
+}
+
+.bib-number {
+  font-family: var(--font-display), sans-serif;
+  font-weight: 700;
+  font-size: 2.4rem;
+  line-height: 0.82;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.eyebrow {
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.78rem;
+  color: var(--chalk-dim);
+}
+
+.readout {
+  font-family: var(--font-display), sans-serif;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.split {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  letter-spacing: -0.02em;
+}
+
+.tape-strip {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--tape) 0 10px,
+    var(--tape-deep) 10px 20px
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ACCESSIBILITY
+   ═══════════════════════════════════════════════════════════════ */
+
+:focus-visible {
+  outline: 2px solid var(--tape);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ⚠️ TEMPORARY COMPATIBILITY LAYER — v2
+   Season 1 hardcoded light Tailwind colours in the components not yet
+   converted (Activities, TeamPerformance, Stats, PointsChampions,
+   UserStatsDrawer).
+
+   v1 remapped text to light but missed gradient backgrounds, giving
+   light-on-light. Tailwind gradients are background-IMAGES, so a
+   background-color override never touched them. v2 flattens every
+   gradient first, so text and background can't disagree.
+
+   DELETE THIS WHOLE BLOCK once all components are converted.
+   ═══════════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  /* 1 ── Kill every gradient. This is the Stats-page fix. */
+  [class*="bg-gradient-to-"] {
+    background-image: none !important;
+    background-color: var(--ink-900) !important;
+  }
+
+  /* 2 ── Every light surface becomes a dark card */
+  .bg-white,
+  .bg-gray-50,
+  .bg-gray-100,
+  .bg-gray-200,
+  .bg-blue-50,
+  .bg-purple-50,
+  .bg-orange-50,
+  .bg-green-100,
+  .bg-yellow-100,
+  .bg-orange-100 {
+    background-color: var(--ink-900) !important;
+  }
+
+  /* 3 ── Dark surfaces align to the new palette */
+  .bg-blue-950,
+  .bg-gray-950,
+  .bg-\[\#0a1430\],
+  .bg-\[\#0A1633\] {
+    background-color: var(--ink-950) !important;
+  }
+  .bg-blue-900,
+  .bg-gray-900,
+  .bg-\[\#111c44\] {
+    background-color: var(--ink-900) !important;
+  }
+  .bg-blue-800,
+  .bg-gray-700,
+  .hover\:bg-blue-800:hover {
+    background-color: var(--ink-800) !important;
+  }
+
+  /* 4 ── All dark text becomes light, since every surface is now dark */
+  .text-gray-900,
+  .text-gray-800,
+  .text-gray-700,
+  .text-black,
+  .text-blue-900,
+  .text-blue-800,
+  .text-green-900,
+  .text-green-700,
+  .text-orange-700 {
+    color: var(--chalk) !important;
+  }
+
+  /* 5 ── Muted text stays muted, but readable */
+  .text-gray-600,
+  .text-gray-500,
+  .text-gray-400,
+  .text-gray-300,
+  .text-gray-200,
+  .text-blue-300,
+  .text-blue-400 {
+    color: var(--chalk-dim) !important;
+  }
+
+  /* 6 ── Borders */
+  .border-gray-200,
+  .border-gray-300,
+  .border-blue-800 {
+    border-color: var(--ink-800) !important;
+  }
+
+  /* 7 ── Heavy shadows read as dirt on a dark background */
+  .shadow,
+  .shadow-md,
+  .shadow-lg,
+  .shadow-xl {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4) !important;
+  }
 }

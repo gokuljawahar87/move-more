@@ -9,6 +9,7 @@ import { Header } from "@/components/Header";
 import StatsPage from "./stats/page";
 import PointsChampions from "@/components/PointsChampions";   // ⭐ NEW
 import BottomNav from "@/components/BottomNav";
+import { showChampions } from "@/lib/season";
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<
@@ -86,18 +87,16 @@ function AppContent() {
         <Header isGuest />
 
         {/* Fixed guest banner */}
-        <div className="fixed top-[56px] left-0 right-0 bg-yellow-500 text-black py-2 text-sm font-semibold text-center shadow-md z-30">
-          👀 Viewing as Guest – Read-only mode
-        </div>
+        <div className="shrink-0 bg-tape text-ink-950 py-2 text-sm font-semibold text-center">
+  Viewing as Guest — read-only mode
+</div>
 
-        <div className="h-[32px]" />
-
-        <div className="flex-1 overflow-y-auto pb-32 pt-24 px-2 sm:px-6">
+        <div className="flex-1 overflow-y-auto pb-32 px-2 sm:px-6">
           {activeTab === "activities" && <Activities />}
           {activeTab === "leaderboard" && <Leaderboard />}
           {activeTab === "teams" && <TeamPerformance />}
           {activeTab === "stats" && <StatsPage />}
-          {activeTab === "championship" && <PointsChampions />}
+          {activeTab === "championship" && showChampions() && <PointsChampions />}
         </div>
 
         <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -119,12 +118,12 @@ function AppContent() {
     <div className="flex flex-col min-h-screen bg-blue-950 text-white">
       <Header />
 
-      <div className="flex-1 overflow-y-auto pb-32 pt-16">
+      <div className="flex-1 overflow-y-auto pb-32">
         {activeTab === "activities" && <Activities />}
         {activeTab === "leaderboard" && <Leaderboard />}
         {activeTab === "teams" && <TeamPerformance />}
         {activeTab === "stats" && <StatsPage />}
-        {activeTab === "championship" && <PointsChampions />} {/* ⭐ NEW */}
+        {activeTab === "championship" && showChampions() && <PointsChampions />} {/* ⭐ NEW */}
       </div>
 
       <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />

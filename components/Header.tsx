@@ -1,30 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Menu } from "lucide-react";
+import { Menu, Link2 } from "lucide-react";
 import UserStatsDrawer from "./UserStatsDrawer";
+import { SEASON, getSeasonStatus, type SeasonStatus } from "@/lib/season";
 
 export function Header({ isGuest = false }: { isGuest?: boolean }) {
   const [initials, setInitials] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profile, setProfile] = useState<any>(null);
-  const [countdown, setCountdown] = useState("");
-  const [eventEnded, setEventEnded] = useState(false);
+  const [status, setStatus] = useState<SeasonStatus | null>(null);
 
   useEffect(() => {
-    if (isGuest) return; // 👈 Skip fetching profile in guest mode
+    if (isGuest) return;
 
     async function fetchProfile() {
       try {
         const res = await fetch("/api/profile");
         if (!res.ok) return;
-        const profile = await res.json();
-        setProfile(profile);
-        if (profile?.first_name || profile?.last_name) {
-          const first = profile.first_name?.[0] ?? "";
-          const last = profile.last_name?.[0] ?? "";
-          setInitials(`${first}${last}`.toUpperCase());
+        const p = await res.json();
+        setProfile(p);
+        if (p?.first_name || p?.last_name) {
+          setInitials(
+            `${p.first_name?.[0] ?? ""}${p.last_name?.[0] ?? ""}`.toUpperCase()
+          );
         }
       } catch (err) {
         console.error("Failed to fetch profile", err);
@@ -33,31 +33,11 @@ export function Header({ isGuest = false }: { isGuest?: boolean }) {
     fetchProfile();
   }, [isGuest]);
 
-  // ⏳ Countdown to 10 PM IST Today
+  // Season clock — ticks once a minute, not once a second. A month-long
+  // event doesn't need a seconds counter; it just burns battery.
   useEffect(() => {
-    const target = new Date("2025-10-31T22:00:00+05:30").getTime();
-    const interval = setInterval(() => {
-      const now = Date.now();
-      const diff = target - now;
-
-      if (diff <= 0) {
-        setEventEnded(true);
-        setCountdown("");
-        clearInterval(interval);
-        return;
-      }
-
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-      setCountdown(
-        `${hours.toString().padStart(2, "0")}:${minutes
-          .toString()
-          .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
-      );
-    }, 1000);
-
+    setStatus(getSeasonStatus());
+    const interval = setInterval(() => setStatus(getSeasonStatus()), 60_000);
     return () => clearInterval(interval);
   }, []);
 
@@ -68,80 +48,132 @@ export function Header({ isGuest = false }: { isGuest?: boolean }) {
 
   return (
     <>
-      {/* 🔷 Header Bar */}
-      <header className="flex items-center justify-between px-4 py-3 bg-blue-900 text-white shadow-md fixed top-0 left-0 right-0 z-40">
-        <div className="flex items-center gap-3">
-          {/* In guest mode, disable drawer */}
-          <button
-            onClick={() => !isGuest && setSidebarOpen(true)}
-            className={`p-2 rounded ${
-              isGuest ? "opacity-40 cursor-not-allowed" : "hover:bg-blue-800"
-            }`}
-          >
-            <Menu size={22} />
-          </button>
-
-          <img src="/logo.png" alt="App Logo" className="w-8 h-8 rounded" />
-          <h1 className="text-lg font-semibold">AAP – Move-Athon-Mania</h1>
-        </div>
-
-        {/* Profile Button (hidden in guest mode) */}
-        {!isGuest && (
-          <div className="relative">
+      {/* In-flow, not fixed. The page is a flex column with a scrolling
+          content area below, so the header stays put on its own — and
+          nothing needs a hand-tuned padding value to clear it. */}
+      <header className="relative z-40 shrink-0 bg-ink-950 border-b border-ink-800">
+        <div className="flex items-center justify-between px-4 h-14">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
-              onClick={() => setMenuOpen((prev) => !prev)}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-white text-black font-bold shadow"
+              onClick={() => !isGuest && setSidebarOpen(true)}
+              disabled={isGuest}
+              aria-label="Open your stats"
+              className="p-1.5 -ml-1.5 rounded-lg text-chalk-dim hover:text-chalk hover:bg-ink-800 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
             >
-              {initials || "?"}
+              <Menu size={20} />
             </button>
 
-            {menuOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-white text-black rounded-lg shadow-lg p-4 z-50">
-                <p className="font-semibold mb-2">
-                  {profile?.first_name} {profile?.last_name}
-                </p>
+            <img src="/logo.png" alt="" className="w-7 h-7 rounded" />
 
-                {profile?.strava_connected ? (
-                  <p className="text-green-600 font-medium">✅ Connected to Strava</p>
-                ) : (
-                  <button
-                    onClick={handleConnectStrava}
-                    className="block w-full text-center bg-pink-600 text-white px-3 py-2 rounded-lg hover:bg-pink-700"
-                  >
-                    Connect to Strava
-                  </button>
-                )}
+            <div className="min-w-0 leading-none">
+              <div className="font-display font-700 uppercase tracking-wide text-[15px] truncate">
+                {SEASON.title}
               </div>
-            )}
+              <div className="eyebrow text-[9px] mt-0.5">
+                Season {String(SEASON.number).padStart(2, "0")}
+              </div>
+            </div>
+          </div>
+
+          {!isGuest && (
+            <div className="relative shrink-0">
+              <button
+                onClick={() => setMenuOpen((v) => !v)}
+                aria-label="Your profile"
+                className="w-9 h-9 flex items-center justify-center rounded-full bg-tape text-ink-950 font-display font-700 text-sm"
+              >
+                {initials || "—"}
+              </button>
+
+              {menuOpen && (
+                <div className="absolute right-0 mt-2 w-60 bib p-4 z-50">
+                  <p className="font-display font-600 uppercase tracking-wide text-base pt-1">
+                    {profile?.first_name} {profile?.last_name}
+                  </p>
+                  {profile?.team && (
+                    <p className="split text-chalk-dim mt-0.5">
+                      {profile.team}
+                    </p>
+                  )}
+
+                  <div className="h-px bg-ink-800 my-3" />
+
+                  {profile?.strava_connected ? (
+                    <p className="flex items-center gap-2 text-sm text-walk">
+                      <Link2 size={14} />
+                      Strava connected
+                    </p>
+                  ) : (
+                    <button
+                      onClick={handleConnectStrava}
+                      className="w-full bg-tape text-ink-950 px-3 py-2 rounded-lg font-display font-700 uppercase tracking-wide text-sm hover:bg-tape-deep transition-colors"
+                    >
+                      Connect Strava
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Season progress strip ──────────────────────────────
+            Replaces Season 1's hardcoded countdown. Shows position
+            within the season rather than a ticking clock — more
+            useful information for a month-long event. */}
+        {status && (
+          <div className="px-4 pb-2">
+            <div className="flex items-baseline justify-between mb-1">
+              {status.phase === "live" && (
+                <>
+                  <span className="eyebrow text-[9px]">
+                    Day {status.dayNumber} of {status.totalDays}
+                  </span>
+                  <span className="split text-tape">
+                    {status.remaining} left
+                  </span>
+                </>
+              )}
+              {status.phase === "upcoming" && (
+                <>
+                  <span className="eyebrow text-[9px]">Starts soon</span>
+                  <span className="split text-tape">
+                    in {status.remaining}
+                  </span>
+                </>
+              )}
+              {status.phase === "ended" && (
+                <>
+                  <span className="eyebrow text-[9px]">Season complete</span>
+                  <span className="split text-tape">See Champions</span>
+                </>
+              )}
+            </div>
+
+            <div className="h-[3px] w-full bg-ink-800 rounded-full overflow-hidden">
+              <div
+                className={
+                  status.phase === "ended"
+                    ? "h-full tape-strip"
+                    : "h-full bg-tape transition-all duration-700"
+                }
+                style={{ width: `${Math.max(1.5, status.progress)}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {isGuest && (
+          <div className="tape-strip">
+            <div className="bg-ink-950/85 py-1.5 text-center">
+              <span className="eyebrow text-[9px] text-tape">
+                Guest view · read only
+              </span>
+            </div>
           </div>
         )}
       </header>
 
-    {/* 🟧 Announcement Bar — HIDDEN IN GUEST MODE */}
-{!isGuest && (
-  <>
-    <div className="
-        fixed top-[56px] left-0 right-0 
-        bg-orange-600 text-white text-sm font-semibold 
-        min-h-[50px] flex items-center justify-center 
-        z-30 shadow-md text-center px-4 py-2 leading-tight
-    ">
-      {!eventEnded ? (
-        <span>
-          🏁 Event Ends Today — Time Left: <strong>{countdown}</strong> ⏰
-        </span>
-      ) : (
-        <span className="text-white animate-pulse">
-          🛑 Event closed — check the new Champions tab for winners 🏆
-        </span>
-      )}
-    </div>
-
-    <div className="h-[55px]" />
-  </>
-)}
-
-      {/* 🧭 Stats Drawer (disabled in guest mode) */}
       {!isGuest && (
         <UserStatsDrawer
           isOpen={sidebarOpen}
