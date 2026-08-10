@@ -15,10 +15,29 @@ export const SEASON = {
   start: new Date("2026-09-01T00:00:00+05:30"),
   end: new Date("2026-09-30T22:00:00+05:30"),
 
+  // Trial period — the app is open, but nothing here is ever scored.
+  // Its purpose is to collect real fraud examples so the detection
+  // thresholds can be tuned before Season 2 starts.
+  trialStart: new Date("2026-08-15T00:00:00+05:30"),
+
   // The Champions tab stays hidden until the season ends. Flip this to
   // true if you want to preview that tab before then.
   forceShowChampions: false,
 };
+
+/**
+ * Which season an activity belongs to, decided by when it happened.
+ *   0 = trial (never scored)
+ *   2 = Season 2
+ * Anything before the trial is Season 1 and is not re-synced.
+ */
+export function seasonForDate(date: Date): number {
+  if (date.getTime() >= SEASON.start.getTime()) return SEASON.number;
+  return 0;
+}
+
+/** Earliest date the sync should reach back to. */
+export const SYNC_FLOOR = SEASON.trialStart;
 
 /** Champions tab is revealed only once the season has finished. */
 export function showChampions(now: Date = new Date()): boolean {

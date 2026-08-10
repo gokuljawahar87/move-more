@@ -1,25 +1,16 @@
-// app/api/strava/refresh/route.ts
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin"; // ⬅️ was the anon client; writes need service role
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { SYNC_FLOOR, seasonForDate } from "@/lib/season";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60; // Strava sync across all users can be slow
+export const maxDuration = 60;
 
-// ─────────────────────────────────────────────────────────────────────
-// 🗓️  SYNC WINDOW  — see refresh-user/route.ts for the full explanation.
-// The old 2025-10-29 / 2025-10-31 cutoffs meant this route silently
-// synced nothing. Replaced with a rolling lookback for the smoke test.
-// ─────────────────────────────────────────────────────────────────────
+// Sync reaches back to the trial start; the season each activity
+// belongs to is decided per-activity by seasonForDate().
+const SYNC_START = SYNC_FLOOR;
+const SYNC_END: Date | null = null;
 
-const TEST_LOOKBACK_DAYS = 30;
-
-const SYNC_START = new Date(
-  Date.now() - TEST_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
-);
-const SYNC_END: Date | null = null; // null = no upper bound
-
-// Set to false while testing — when true, activities that vanished from
-// Strava get deleted locally. Risky to leave on during a trial run.
+// Deletion of vanished activities stays off through the trial.
 const ENABLE_DELETIONS = false;
 
 async function runRefresh() {
@@ -200,6 +191,19 @@ async function runRefresh() {
           strava_url: `https://www.strava.com/activities/${a.id}`,
           is_valid: existingRecord ? existingRecord.is_valid : true,
           is_valid_locked: existingRecord?.is_valid_locked || false,
+
+          // Which season this belongs to — trial data is tagged 0
+          season: seasonForDate(new Date(a.start_date)),
+
+          // ── Fraud-detection fields ──────────────────────────────
+          // elapsed vs moving catches all-day recording;
+          // max_speed catches vehicle spikes in walks and runs.
+          elapsed_time: a.elapsed_time ?? null,
+          max_speed: a.max_speed ?? null,
+          average_speed: a.average_speed ?? null,
+          strava_flagged: a.flagged ?? false,
+          trainer: a.trainer ?? false,
+          device_name: a.device_name ?? null,
         };
       });
 

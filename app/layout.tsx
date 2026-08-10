@@ -2,6 +2,7 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { Barlow_Condensed, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import Splash from "@/components/Splash";
 
 /* ── Typeface pairing ─────────────────────────────────────────────
    Display: Barlow Condensed — narrow, athletic, the face of race
@@ -55,6 +56,7 @@ export default function RootLayout({
       className={`${display.variable} ${body.variable} ${mono.variable}`}
     >
       <body className="bg-ink-950 text-chalk antialiased">
+        <Splash />
         <div className="relative z-10">{children}</div>
       </body>
     </html>

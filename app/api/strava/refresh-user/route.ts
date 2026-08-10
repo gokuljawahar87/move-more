@@ -1,27 +1,13 @@
-// app/api/strava/refresh-user/route.ts
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin"; // ⬅️ was the anon client; writes need service role
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { SYNC_FLOOR, seasonForDate } from "@/lib/season";
 
 export const dynamic = "force-dynamic";
 
-// ─────────────────────────────────────────────────────────────────────
-// 🗓️  SYNC WINDOW
-//
-// Old code had three hardcoded 2025 dates that made this route a no-op:
-//   challengeStart    = 2025-10-01
-//   refreshCutoff     = 2025-10-29   ← nothing older was touched
-//   competitionCutoff = 2025-10-31   ← nothing newer was accepted
-//
-// For the smoke test we just pull the last N days. When the new event
-// dates are fixed, set SYNC_START / SYNC_END and re-enable the window.
-// ─────────────────────────────────────────────────────────────────────
-
-const TEST_LOOKBACK_DAYS = 30;
-
-const SYNC_START = new Date(
-  Date.now() - TEST_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
-);
-const SYNC_END: Date | null = null; // null = no upper bound
+// Sync reaches back to the trial start; the season each activity
+// belongs to is decided per-activity by seasonForDate().
+const SYNC_START = SYNC_FLOOR;
+const SYNC_END: Date | null = null;
 
 export async function POST(req: Request) {
   try {
@@ -174,6 +160,19 @@ export async function POST(req: Request) {
           strava_url: `https://www.strava.com/activities/${a.id}`,
           is_valid: existing ? existing.is_valid : true,
           is_valid_locked: existing?.is_valid_locked || false,
+
+          // Which season this belongs to — trial data is tagged 0
+          season: seasonForDate(new Date(a.start_date)),
+
+          // ── Fraud-detection fields ──────────────────────────────
+          // elapsed vs moving catches all-day recording;
+          // max_speed catches vehicle spikes in walks and runs.
+          elapsed_time: a.elapsed_time ?? null,
+          max_speed: a.max_speed ?? null,
+          average_speed: a.average_speed ?? null,
+          strava_flagged: a.flagged ?? false,
+          trainer: a.trainer ?? false,
+          device_name: a.device_name ?? null,
         };
       });
 
