@@ -1,21 +1,31 @@
 {
-  "name": "MoveMore",
-  "short_name": "MoveMore",
-  "start_url": "/",
+  "name": "Move-Athon S2",
+  "short_name": "Move-Athon S2",
+  "description": "AAP Move-Athon Mania, Season 2",
+  "start_url": "/app",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#0f172a",
+  "background_color": "#150e22",
+  "theme_color": "#150e22",
   "orientation": "portrait",
   "icons": [
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

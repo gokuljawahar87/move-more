@@ -2,7 +2,6 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { Barlow_Condensed, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
-import Splash from "@/components/Splash";
 
 /* ── Typeface pairing ─────────────────────────────────────────────
    Display: Barlow Condensed — narrow, athletic, the face of race
@@ -34,9 +33,26 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Move-Athon Mania — Season 2",
-  description: "Get moving, get winning.",
+  // `title` is what a browser tab shows. iOS uses appleWebApp.title for
+  // the home-screen label — without it you get the manifest name or,
+  // worse, a guess from the page title.
+  title: "Move-Athon S2",
+  description: "AAP Move-Athon Mania, Season 2",
   manifest: "/manifest.webmanifest",
+
+  // iOS ignores manifest icons for the home screen and looks for an
+  // apple-touch-icon. Missing one is why the generic browser icon
+  // appeared instead of the logo.
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
+
+  appleWebApp: {
+    capable: true,
+    title: "Move-Athon S2",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export const viewport: Viewport = {
@@ -56,7 +72,6 @@ export default function RootLayout({
       className={`${display.variable} ${body.variable} ${mono.variable}`}
     >
       <body className="bg-ink-950 text-chalk antialiased">
-        <Splash />
         <div className="relative z-10">{children}</div>
       </body>
     </html>
