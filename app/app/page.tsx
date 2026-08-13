@@ -2,20 +2,35 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { Activities } from "@/components/Activities";
 import Leaderboard from "@/components/Leaderboard";
 import { TeamPerformance } from "@/components/TeamPerformance";
 import { Header } from "@/components/Header";
 import StatsPage from "./stats/page";
-import PointsChampions from "@/components/PointsChampions";   // ⭐ NEW
+import PointsChampions from "@/components/PointsChampions";
 import BottomNav from "@/components/BottomNav";
 import { showChampions } from "@/lib/season";
 
-function AppContent() {
-  const [activeTab, setActiveTab] = useState<
-    "activities" | "leaderboard" | "teams" | "stats" | "championship"
-  >("activities");
+type Tab = "activities" | "leaderboard" | "teams" | "stats" | "championship";
 
+/**
+ * Is this profile response good enough to enter the app?
+ *
+ * /api/profile always returns HTTP 200, even when the person hasn't
+ * registered — it signals that in the body instead. The old code only
+ * checked res.ok and profile.user_id, so a Season 1 profile passed
+ * straight through and landed in the app with no team.
+ */
+function isRegisteredThisSeason(profile: any): boolean {
+  if (!profile || !profile.user_id) return false;
+  if (profile.not_employee) return false; // not on this year's roster
+  if (profile.no_profile) return false; // never registered, or Season 1
+  return true;
+}
+
+function AppContent() {
+  const [activeTab, setActiveTab] = useState<Tab>("activities");
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
   const router = useRouter();
@@ -27,7 +42,6 @@ function AppContent() {
 
     async function checkProfile() {
       if (guestMode) {
-        console.log("🟡 Guest mode — skipping profile fetch");
         localStorage.removeItem("user_id");
         setLoading(false);
         return;
@@ -35,13 +49,17 @@ function AppContent() {
 
       try {
         const res = await fetch("/api/profile");
-        if (!res.ok) throw new Error("Profile not found");
+        const profile = res.ok ? await res.json() : null;
 
-        const profile = await res.json();
-        if (!profile || !profile.user_id) throw new Error("No profile found");
+        if (isRegisteredThisSeason(profile)) {
+          localStorage.setItem("user_id", profile.user_id);
+          setLoading(false);
+          return;
+        }
 
-        localStorage.setItem("user_id", profile.user_id);
-      } catch {
+        // Not registered this season. Try restoring a session first —
+        // but only accept the result if it also passes the same gate,
+        // otherwise restore-session would let a Season 1 user back in.
         const savedUserId = localStorage.getItem("user_id");
 
         if (savedUserId) {
@@ -53,16 +71,25 @@ function AppContent() {
             });
 
             if (restoreRes.ok) {
-              const restored = await restoreRes.json();
-              if (restored?.user_id) {
+              const recheck = await fetch("/api/profile");
+              const restored = recheck.ok ? await recheck.json() : null;
+
+              if (isRegisteredThisSeason(restored)) {
                 localStorage.setItem("user_id", restored.user_id);
                 setLoading(false);
                 return;
               }
             }
-          } catch {}
+          } catch {
+            // fall through to registration
+          }
         }
 
+        // Stale identity — clear it so the registration page starts clean
+        localStorage.removeItem("user_id");
+        router.replace("/register");
+      } catch (err) {
+        console.error("Profile check failed:", err);
         router.replace("/register");
       } finally {
         setLoading(false);
@@ -74,58 +101,54 @@ function AppContent() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen text-white bg-blue-950">
-        Checking profile...
+      <div className="flex flex-col items-center justify-center h-screen gap-3">
+        <Loader2 className="animate-spin text-tape" size={22} />
+        <p className="eyebrow text-[10px]">Checking your bib</p>
       </div>
     );
   }
 
-  // ⭐ Guest UI
+  const tabs = (
+    <>
+      {activeTab === "activities" && <Activities />}
+      {activeTab === "leaderboard" && <Leaderboard />}
+      {activeTab === "teams" && <TeamPerformance />}
+      {activeTab === "stats" && <StatsPage />}
+      {activeTab === "championship" && showChampions() && <PointsChampions />}
+    </>
+  );
+
+  // ── Guest view ─────────────────────────────────────────────────
   if (isGuest) {
     return (
-      <div className="flex flex-col min-h-screen bg-blue-950 text-white">
+      <div className="flex flex-col min-h-screen">
         <Header isGuest />
 
-        {/* Fixed guest banner */}
-        <div className="shrink-0 bg-tape text-ink-950 py-2 text-sm font-semibold text-center">
-  Viewing as Guest — read-only mode
-</div>
-
-        <div className="flex-1 overflow-y-auto pb-32 px-2 sm:px-6">
-          {activeTab === "activities" && <Activities />}
-          {activeTab === "leaderboard" && <Leaderboard />}
-          {activeTab === "teams" && <TeamPerformance />}
-          {activeTab === "stats" && <StatsPage />}
-          {activeTab === "championship" && showChampions() && <PointsChampions />}
+        <div className="shrink-0 bg-tape text-ink-950 py-2 text-center font-display font-600 uppercase tracking-[0.14em] text-[11px]">
+          Viewing as guest — read only
         </div>
+
+        <div className="flex-1 overflow-y-auto pb-32 px-2 sm:px-6">{tabs}</div>
 
         <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
 
-        <div className="py-3 text-xs text-blue-300 text-center border-t border-blue-800">
+        <div className="py-3 text-center border-t border-ink-800">
           <button
-            className="underline text-blue-400 hover:text-blue-300"
+            className="font-display uppercase tracking-[0.12em] text-[11px] text-chalk-dim hover:text-tape transition-colors"
             onClick={() => router.push("/register")}
           >
-            Back to Employee Login
+            Back to employee login
           </button>
         </div>
       </div>
     );
   }
 
-  // 🎯 Normal User UI
+  // ── Registered user ────────────────────────────────────────────
   return (
-    <div className="flex flex-col min-h-screen bg-blue-950 text-white">
+    <div className="flex flex-col min-h-screen">
       <Header />
-
-      <div className="flex-1 overflow-y-auto pb-32">
-        {activeTab === "activities" && <Activities />}
-        {activeTab === "leaderboard" && <Leaderboard />}
-        {activeTab === "teams" && <TeamPerformance />}
-        {activeTab === "stats" && <StatsPage />}
-        {activeTab === "championship" && showChampions() && <PointsChampions />} {/* ⭐ NEW */}
-      </div>
-
+      <div className="flex-1 overflow-y-auto pb-32">{tabs}</div>
       <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
     </div>
   );
@@ -133,7 +156,13 @@ function AppContent() {
 
 export default function AppPage() {
   return (
-    <Suspense fallback={<div className="text-white text-center p-6">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-screen">
+          <Loader2 className="animate-spin text-tape" size={22} />
+        </div>
+      }
+    >
       <AppContent />
     </Suspense>
   );

@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { SEASON } from "@/lib/season";
 
 export async function GET() {
   try {
@@ -12,36 +13,46 @@ export async function GET() {
       return NextResponse.json({ user_id: null });
     }
 
-    // Check employee_master first
+    // Must be on this season's roster
     const { data: emp, error: empErr } = await supabaseAdmin
       .from("employee_master")
-      .select("user_id")
+      .select("user_id, team")
       .eq("user_id", user_id)
       .maybeSingle();
 
     if (empErr || !emp) {
-      console.warn("❗ Not in employee_master:", user_id);
       return NextResponse.json({ user_id, not_employee: true });
     }
 
-    // Now fetch profile
     const { data, error } = await supabaseAdmin
       .from("profiles")
-      .select("user_id, first_name, last_name, team, strava_connected")
+      .select(
+        "user_id, first_name, last_name, team, strava_connected, season"
+      )
       .eq("user_id", user_id)
-      .single();
+      .maybeSingle();
 
-    if (error) {
-      console.warn("Profile not found:", error.message);
+    if (error || !data) {
       return NextResponse.json({ user_id, not_employee: false, no_profile: true });
+    }
+
+    // ── Season gate ──────────────────────────────────────────────
+    // A Season 1 profile is not a Season 2 registration. Treating it
+    // as one is what would carry last year's team across.
+    if (data.season !== SEASON.number) {
+      return NextResponse.json({
+        user_id,
+        not_employee: false,
+        no_profile: true,
+        previous_season: data.season,
+        first_name: data.first_name,
+        last_name: data.last_name,
+      });
     }
 
     return NextResponse.json(data);
   } catch (err: any) {
     console.error("Profile API error:", err);
-    return NextResponse.json(
-      { error: err.message, user_id: null },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: err.message, user_id: null }, { status: 500 });
   }
 }

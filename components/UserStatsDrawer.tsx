@@ -1,12 +1,9 @@
+// components/UserStatsDrawer.tsx
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
-import { Pie } from "react-chartjs-2";
-import { Chart as ChartJS, ArcElement, Tooltip, Legend, ChartOptions } from "chart.js";
-import { FaRunning, FaShoePrints, FaBicycle, FaMedal, FaTrophy, FaUsers } from "react-icons/fa";
-
-ChartJS.register(ArcElement, Tooltip, Legend);
+import { X, Loader2, Footprints, Bike, Activity } from "lucide-react";
 
 interface UserStatsDrawerProps {
   isOpen: boolean;
@@ -14,11 +11,14 @@ interface UserStatsDrawerProps {
   userId: string | null;
 }
 
-export default function UserStatsDrawer({ isOpen, onClose, userId }: UserStatsDrawerProps) {
+export default function UserStatsDrawer({
+  isOpen,
+  onClose,
+  userId,
+}: UserStatsDrawerProps) {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  // Fetch user stats when opened
   useEffect(() => {
     if (!isOpen || !userId) return;
     (async () => {
@@ -35,226 +35,260 @@ export default function UserStatsDrawer({ isOpen, onClose, userId }: UserStatsDr
     })();
   }, [isOpen, userId]);
 
-  // 🧩 Chart setup
-  const data = {
-    labels: ["Walk", "Run", "Cycle"],
-    datasets: [
-      {
-        data: [stats?.walkKm ?? 0, stats?.runKm ?? 0, stats?.cycleKm ?? 0],
-        backgroundColor: ["#a855f7", "#ef4444", "#f97316"],
-        borderWidth: 1,
-      },
-    ],
-  };
-
-  const options: ChartOptions<"pie"> = {
-    layout: { padding: { top: 0, bottom: 0 } },
-    plugins: {
-      legend: {
-        display: true,
-        position: "bottom",
-        labels: {
-          boxWidth: 16,
-          boxHeight: 10,
-          padding: 10,
-          font: { size: 12 },
-          generateLabels: (chart) => {
-            const dataset = chart.data.datasets[0];
-            const total = (dataset.data as number[]).reduce((a, b) => a + b, 0);
-            return chart.data.labels!.map((label: any, i: number) => {
-              const value = dataset.data[i] as number;
-              const percent = total > 0 ? ((value / total) * 100).toFixed(1) : "0";
-              return {
-                text: `${label} – ${value.toFixed(1)} km (${percent}%)`,
-                fillStyle: dataset.backgroundColor![i] as string,
-                strokeStyle: dataset.backgroundColor![i] as string,
-                hidden: false,
-              };
-            });
-          },
-        },
-      },
-      tooltip: { enabled: false },
-    },
-    cutout: "70%",
-  };
+  const walk = stats?.walkKm ?? 0;
+  const run = stats?.runKm ?? 0;
+  const cycle = stats?.cycleKm ?? 0;
+  const total = walk + run + cycle;
+  const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0);
 
   return (
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Overlay */}
           <motion.div
-            className="fixed inset-0 bg-black bg-opacity-40 z-50"
+            className="fixed inset-0 bg-black/60 z-50"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
           />
 
-          {/* Sidebar Drawer */}
           <motion.div
-            className="fixed top-0 left-0 w-80 h-full bg-white text-gray-900 shadow-xl p-6 overflow-y-auto z-50"
+            className="fixed top-0 left-0 w-[86vw] max-w-[340px] h-full z-50 overflow-y-auto border-r border-ink-800"
+            style={{ backgroundColor: "var(--ink-950)" }}
             initial={{ x: "-100%" }}
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">📊 Your Activity Stats</h2>
-              <button onClick={onClose} className="text-gray-500 hover:text-black text-lg">
-                ✕
-              </button>
-            </div>
+            <div className="px-5 pt-6 pb-8">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <p className="eyebrow text-[10px]">Your season</p>
+                  <h2 className="font-display font-700 uppercase text-2xl leading-tight mt-0.5">
+                    Race Card
+                  </h2>
+                </div>
+                <button
+                  onClick={onClose}
+                  aria-label="Close"
+                  className="p-1.5 -mr-1.5 -mt-1 rounded-lg text-chalk-dim hover:text-chalk hover:bg-ink-800 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
 
-            {loading ? (
-              <p className="text-center text-gray-500 mt-10">Loading stats...</p>
-            ) : stats ? (
-              <>
-                {/* Activity Summary */}
-                <div className="space-y-3 mb-4">
-                  <div className="flex justify-between text-gray-800">
-                    <span className="font-medium">Active Days</span>
-                    <span className="font-semibold">{stats.activeDays}</span>
-                  </div>
-
-                  <div className="flex justify-between text-gray-800">
-                    <span className="font-medium">Total Activities</span>
-                    <span className="font-semibold">{stats.totalActivities}</span>
-                  </div>
-
-                  {/* 🏅 Total Points */}
-                  <div className="flex justify-between text-gray-800">
-                    <span className="font-medium flex items-center gap-2">
-                      <FaMedal className="text-yellow-500" /> Total Points
-                    </span>
-                    <span className="font-semibold">{Math.round(stats.totalPoints)}</span>
-                  </div>
-
-                  {/* 👥 Team Rank */}
-                  <div className="flex justify-between text-gray-800">
-                    <span className="font-medium flex items-center gap-2">
-                      <FaTrophy className="text-blue-600" /> Team Position
-                    </span>
-                    <span className="font-semibold">
-                      {stats.teamRank ? `#${stats.teamRank}` : "-"}
-                    </span>
-                  </div>
-
-                  {/* 🌍 Overall Rank */}
-                  <div className="flex justify-between text-gray-800">
-                    <span className="font-medium flex items-center gap-2">
-                      <FaUsers className="text-green-600" /> Overall Position
-                    </span>
-                    <span className="font-semibold">
-                      {stats.overallRank ? `#${stats.overallRank}` : "-"}{" "}
-                      <span className="text-gray-500 text-sm">
-                        / {stats.totalParticipants || 0}
+              {loading ? (
+                <div className="flex justify-center py-16">
+                  <Loader2 className="animate-spin text-tape" size={20} />
+                </div>
+              ) : stats ? (
+                <>
+                  {/* Total distance */}
+                  <div className="bib px-4 pt-6 pb-4 mb-4">
+                    <p className="eyebrow text-[9px]">Distance covered</p>
+                    <div className="flex items-baseline gap-1.5 mt-1">
+                      <span className="readout text-[44px] leading-none text-tape">
+                        {total.toFixed(1)}
                       </span>
-                    </span>
-                  </div>
-                </div>
+                      <span className="eyebrow text-[10px]">km</span>
+                    </div>
 
-                {/* 🥧 Pie Chart (Truly Centered with Plugin) */}
-<div className="relative flex flex-col items-center mt-6">
-  <div className="relative w-60 h-60">
-    <Pie
-      data={data}
-      options={{
-        ...options,
-        layout: { padding: 0 },
-        cutout: "75%",
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: true,
-            position: "bottom",
-            align: "center",
-            labels: {
-              boxWidth: 14,
-              boxHeight: 10,
-              padding: 12,
-              font: { size: 12 },
-              generateLabels: (chart) => {
-                const dataset = chart.data.datasets[0];
-                const total = (dataset.data as number[]).reduce((a, b) => a + b, 0);
-                return chart.data.labels!.map((label: any, i: number) => {
-                  const value = dataset.data[i] as number;
-                  const percent = total > 0 ? ((value / total) * 100).toFixed(1) : "0";
-                  return {
-                    text: `${label} – ${value.toFixed(1)} km (${percent}%)`,
-                    fillStyle: dataset.backgroundColor![i] as string,
-                    strokeStyle: dataset.backgroundColor![i] as string,
-                    hidden: false,
-                  };
-                });
-              },
-            },
-          },
-          tooltip: { enabled: false },
-        },
-      }}
-      plugins={[
-        {
-          id: "centerText",
-          afterDraw: (chart) => {
-            const { ctx, chartArea } = chart;
-            if (!chartArea || !stats?.totalKm) return;
-            const centerX = (chartArea.left + chartArea.right) / 2;
-            const centerY = (chartArea.top + chartArea.bottom) / 2;
+                    {/* Split bar — replaces the pie chart. Same lane
+                        treatment used on the Stats page, and it drops
+                        chart.js entirely. */}
+                    <div className="mt-4 h-2 w-full rounded-full overflow-hidden bg-ink-800 flex">
+                      <div
+                        className="h-full"
+                        style={{
+                          width: `${pct(run)}%`,
+                          backgroundColor: "var(--run)",
+                        }}
+                      />
+                      <div
+                        className="h-full"
+                        style={{
+                          width: `${pct(walk)}%`,
+                          backgroundColor: "var(--walk)",
+                        }}
+                      />
+                      <div
+                        className="h-full"
+                        style={{
+                          width: `${pct(cycle)}%`,
+                          backgroundColor: "var(--cycle)",
+                        }}
+                      />
+                    </div>
 
-            ctx.save();
-            ctx.font = "bold 18px sans-serif";
-            ctx.fillStyle = "#111827";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(`${stats.totalKm.toFixed(1)} km`, centerX, centerY);
-            ctx.restore();
-          },
-        },
-      ]}
-    />
-  </div>
-</div>
-
-
-                {/* 🏃 Longest Activities */}
-                <div className="grid gap-3 mt-8">
-                  <div className="p-3 rounded-xl shadow bg-gray-50 flex items-center justify-between">
-                    <span className="flex items-center gap-2 text-gray-700">
-                      <FaShoePrints className="text-purple-500" /> Longest Walk
-                    </span>
-                    <span className="font-semibold text-gray-900">
-                      {stats.longestWalk ? `${stats.longestWalk.toFixed(1)} km` : "No activity"}
-                    </span>
+                    <div className="mt-3 space-y-1.5">
+                      <Split
+                        colour="var(--run)"
+                        label="Run"
+                        km={run}
+                        pct={pct(run)}
+                      />
+                      <Split
+                        colour="var(--walk)"
+                        label="Walk"
+                        km={walk}
+                        pct={pct(walk)}
+                      />
+                      <Split
+                        colour="var(--cycle)"
+                        label="Cycle"
+                        km={cycle}
+                        pct={pct(cycle)}
+                      />
+                    </div>
                   </div>
 
-                  <div className="p-3 rounded-xl shadow bg-gray-50 flex items-center justify-between">
-                    <span className="flex items-center gap-2 text-gray-700">
-                      <FaRunning className="text-red-500" /> Longest Run
-                    </span>
-                    <span className="font-semibold text-gray-900">
-                      {stats.longestRun ? `${stats.longestRun.toFixed(1)} km` : "No activity"}
-                    </span>
+                  {/* Standings */}
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <Stat
+                      label="Overall"
+                      value={stats.overallRank ? `${stats.overallRank}` : "—"}
+                      suffix={
+                        stats.totalParticipants
+                          ? `of ${stats.totalParticipants}`
+                          : undefined
+                      }
+                      big
+                    />
+                    <Stat
+                      label="In team"
+                      value={stats.teamRank ? `${stats.teamRank}` : "—"}
+                      big
+                    />
                   </div>
 
-                  <div className="p-3 rounded-xl shadow bg-gray-50 flex items-center justify-between">
-                    <span className="flex items-center gap-2 text-gray-700">
-                      <FaBicycle className="text-orange-500" /> Longest Cycle
-                    </span>
-                    <span className="font-semibold text-gray-900">
-                      {stats.longestCycle ? `${stats.longestCycle.toFixed(1)} km` : "No activity"}
-                    </span>
+                  <div className="bib px-4 pt-5 pb-4 mb-4 space-y-2.5">
+                    <Row label="Points" value={Math.round(stats.totalPoints ?? 0)} />
+                    <Row label="Activities" value={stats.totalActivities ?? 0} />
+                    <Row label="Active days" value={stats.activeDays ?? 0} />
                   </div>
-                </div>
-              </>
-            ) : (
-              <p className="text-gray-500 text-sm text-center mt-10">No stats available.</p>
-            )}
+
+                  {/* Personal bests */}
+                  <p className="eyebrow text-[9px] mb-2">Longest efforts</p>
+                  <div className="space-y-2">
+                    <Best
+                      Icon={Activity}
+                      colour="var(--run)"
+                      label="Run"
+                      km={stats.longestRun}
+                    />
+                    <Best
+                      Icon={Footprints}
+                      colour="var(--walk)"
+                      label="Walk"
+                      km={stats.longestWalk}
+                    />
+                    <Best
+                      Icon={Bike}
+                      colour="var(--cycle)"
+                      label="Cycle"
+                      km={stats.longestCycle}
+                    />
+                  </div>
+
+                  {total === 0 && (
+                    <p className="split text-chalk-dim text-center mt-6">
+                      Nothing logged yet. Your first one counts double in
+                      spirit.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="split text-chalk-dim text-center mt-12">
+                  No stats available.
+                </p>
+              )}
+            </div>
           </motion.div>
         </>
       )}
     </AnimatePresence>
+  );
+}
+
+function Split({
+  colour,
+  label,
+  km,
+  pct,
+}: {
+  colour: string;
+  label: string;
+  km: number;
+  pct: number;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className="w-2 h-2 rounded-full shrink-0"
+        style={{ backgroundColor: colour }}
+      />
+      <span className="eyebrow text-[9px] flex-1">{label}</span>
+      <span className="split text-chalk">{km.toFixed(1)} km</span>
+      <span className="split text-chalk-dim w-11 text-right">
+        {pct.toFixed(0)}%
+      </span>
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  suffix,
+  big = false,
+}: {
+  label: string;
+  value: string;
+  suffix?: string;
+  big?: boolean;
+}) {
+  return (
+    <div className="bib px-3.5 pt-5 pb-3.5">
+      <p className="eyebrow text-[9px]">{label}</p>
+      <div className="flex items-baseline gap-1 mt-1">
+        <span className={`readout ${big ? "text-[30px]" : "text-xl"} leading-none`}>
+          {value}
+        </span>
+        {suffix && <span className="split text-chalk-dim">{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="flex justify-between items-baseline">
+      <span className="eyebrow text-[9px]">{label}</span>
+      <span className="readout text-lg">{value}</span>
+    </div>
+  );
+}
+
+function Best({
+  Icon,
+  colour,
+  label,
+  km,
+}: {
+  Icon: typeof Footprints;
+  colour: string;
+  label: string;
+  km?: number | null;
+}) {
+  return (
+    <div className="bib flex items-center gap-3 px-3.5 pt-4 pb-3">
+      <Icon size={15} style={{ color: colour }} strokeWidth={2} />
+      <span className="eyebrow text-[9px] flex-1">{label}</span>
+      <span className="readout text-base" style={{ color: km ? colour : undefined }}>
+        {km ? `${km.toFixed(1)} km` : "—"}
+      </span>
+    </div>
   );
 }

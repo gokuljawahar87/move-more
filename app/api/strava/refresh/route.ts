@@ -1,6 +1,7 @@
+// app/api/strava/refresh/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { SYNC_FLOOR, seasonForDate } from "@/lib/season";
+import { SEASON, SYNC_FLOOR, seasonForDate } from "@/lib/season";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -14,11 +15,15 @@ const SYNC_END: Date | null = null;
 const ENABLE_DELETIONS = false;
 
 async function runRefresh() {
+  // Only people who have registered for THIS season. Without this the
+  // sync pulls activities for last season's participants, which is how
+  // unregistered members' data was appearing in the app.
   const { data: profiles, error: fetchError } = await supabaseAdmin
     .from("profiles")
     .select(
       "user_id, strava_access_token, strava_refresh_token, strava_token_expires_at"
-    );
+    )
+    .eq("season", SEASON.number);
 
   if (fetchError) throw fetchError;
   if (!profiles?.length) {

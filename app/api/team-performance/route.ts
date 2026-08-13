@@ -1,8 +1,12 @@
+// app/api/team-performance/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { SEASON, activeSeason } from "@/lib/season";
 
 // Challenge start (1 Oct 2025, 00:00 IST)
-const CHALLENGE_START = new Date("2025-10-01T00:00:00+05:30");
+// Season dates now come from lib/season.ts, replacing the six
+// hardcoded copies of this constant.
+const CHALLENGE_START = SEASON.start;
 // Work-hour exclusion active from 16 Oct 2025
 const EXCLUDE_START = new Date("2025-10-16T00:00:00+05:30");
 
@@ -67,7 +71,13 @@ export async function GET(request: Request) {
           is_valid
         )
       `)
-      .eq("activities.is_valid", true);
+      .eq("activities.is_valid", true)
+      // Only members registered for this season. Unregistered people
+      // (still tagged last season) are excluded entirely.
+      .eq("season", SEASON.number)
+      // Only the season currently on display: trial data before Sep 1,
+      // Season 2 after. Season 1 is never shown.
+      .eq("activities.season", activeSeason());
 
     // Apply challenge start cutoff
     if (now >= CHALLENGE_START) {

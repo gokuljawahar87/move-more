@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { teamLogo, teamName } from "@/lib/teams";
 
 type LeaderboardEntry = {
   name?: string;
@@ -18,18 +19,6 @@ type LeaderboardData = {
   cyclers: LeaderboardEntry[];
   teams: LeaderboardEntry[];
   topFemales?: LeaderboardEntry[];
-};
-
-// ⚠️ Season 2: replace these with the new team names and logo files.
-const teamLogos: Record<string, string> = {
-  "THE POWERHOUSE": "/logos/powerhouse.png",
-  "Corporate Crusaders": "/logos/crusaders.png",
-  "RAC ROCKERS": "/logos/rockers.png",
-  "ALPHA SQUAD": "/logos/alpha.png",
-  "Black Forest Brigade": "/logos/brigade.png",
-  RACKETS: "/logos/rackets.png",
-  "VIBE TRIBE": "/logos/vibe.png",
-  GOAT: "/logos/goat.png",
 };
 
 export default function Leaderboard() {
@@ -141,7 +130,7 @@ function Section({
         <div className="space-y-2">
           {list.map((item, i) => {
             const rank = i + 1;
-            const logo = item.team ? teamLogos[item.team] : null;
+            const logo = teamLogo(item.team);
 
             return (
               <div
@@ -174,11 +163,11 @@ function Section({
 
                 <div className="min-w-0 flex-1">
                   <div className="font-display font-600 uppercase tracking-wide text-[17px] leading-tight truncate">
-                    {isTeam ? item.team : item.name}
+                    {isTeam ? teamName(item.team) : item.name}
                   </div>
                   {!isTeam && item.team && (
                     <div className="split text-chalk-dim truncate mt-0.5">
-                      {item.team}
+                      {teamName(item.team)}
                     </div>
                   )}
                 </div>

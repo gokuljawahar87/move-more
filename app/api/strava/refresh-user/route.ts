@@ -1,6 +1,7 @@
+// app/api/strava/refresh-user/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { SYNC_FLOOR, seasonForDate } from "@/lib/season";
+import { SEASON, SYNC_FLOOR, seasonForDate } from "@/lib/season";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,9 @@ export async function POST(req: Request) {
     // ── Load tokens ──────────────────────────────────────────────────
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
-      .select("strava_access_token, strava_refresh_token, strava_token_expires_at")
+      .select(
+        "season, strava_access_token, strava_refresh_token, strava_token_expires_at"
+      )
       .eq("user_id", user_id)
       .maybeSingle();
 
@@ -27,6 +30,14 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "User not connected to Strava" },
         { status: 400 }
+      );
+    }
+
+    // Not registered for this season — nothing should sync for them.
+    if (profile.season !== SEASON.number) {
+      return NextResponse.json(
+        { error: "Not registered for this season" },
+        { status: 403 }
       );
     }
 

@@ -18,7 +18,7 @@ export const SEASON = {
   // Trial period — the app is open, but nothing here is ever scored.
   // Its purpose is to collect real fraud examples so the detection
   // thresholds can be tuned before Season 2 starts.
-  trialStart: new Date("2026-08-15T00:00:00+05:30"),
+  trialStart: new Date("2026-08-01T00:00:00+05:30"),
 
   // The Champions tab stays hidden until the season ends. Flip this to
   // true if you want to preview that tab before then.
@@ -38,6 +38,19 @@ export function seasonForDate(date: Date): number {
 
 /** Earliest date the sync should reach back to. */
 export const SYNC_FLOOR = SEASON.trialStart;
+
+/**
+ * Which season the app should DISPLAY right now.
+ *
+ * Read routes filter on this, so:
+ *   - during the trial → 0, testers see only trial data
+ *   - from Sep 1       → 2, trial data vanishes on its own
+ *
+ * Season 1 is never displayed; it stays in the table as history.
+ */
+export function activeSeason(now: Date = new Date()): number {
+  return now.getTime() >= SEASON.start.getTime() ? SEASON.number : 0;
+}
 
 /** Champions tab is revealed only once the season has finished. */
 export function showChampions(now: Date = new Date()): boolean {

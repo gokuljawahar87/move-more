@@ -1,10 +1,13 @@
+// app/app/stats/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
+import { Users, Loader2 } from "lucide-react";
 import Stats from "@/components/Stats";
-import { FaUsers } from "react-icons/fa";
+import { SEASON, getSeasonStatus } from "@/lib/season";
 
 export default function StatsPage() {
+  const [loading, setLoading] = useState(true);
   const [globalTotals, setGlobalTotals] = useState({
     total_distance: 0,
     cycling_distance: 0,
@@ -28,10 +31,9 @@ export default function StatsPage() {
 
         teams.forEach((team: any) => {
           (team.members || []).forEach((m: any) => {
-            walk += m.walk || 0;   // ✅ Already KM
-            run += m.run || 0;     // ✅ Already KM
-            cycle += m.cycle || 0; // ✅ Already KM
-
+            walk += m.walk || 0;
+            run += m.run || 0;
+            cycle += m.cycle || 0;
             if ((m.walk || m.run || m.cycle) > 0) participantSet.add(m.name);
           });
         });
@@ -45,35 +47,70 @@ export default function StatsPage() {
         });
       } catch (err) {
         console.error("StatsPage error:", err);
+      } finally {
+        setLoading(false);
       }
     })();
   }, []);
 
+  const status = getSeasonStatus();
+  const movers = globalTotals.total_participants;
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="animate-spin text-tape" size={22} />
+      </div>
+    );
+  }
+
   return (
-    <main className="p-6 flex flex-col gap-6">
-      <div className="text-center mb-2">
-        <h1 className="text-3xl font-bold text-white">Move-a-thon Mania</h1>
-        <p className="text-xl font-bold text-white">🏆 Overall Stats 🏆</p>
-      </div>
-
-      <hr className="my-2 border-gray-400" />
-
-      {/* Total Participants */}
-      <div className="rounded-2xl shadow-md p-6 flex items-center justify-between bg-gradient-to-r from-blue-100 to-cyan-100 text-gray-900 border border-blue-200 min-h-[120px]">
-        <div>
-          <p className="text-gray-600 text-sm">Total Participants</p>
-          <h2 className="text-3xl font-bold">{globalTotals.total_participants}</h2>
+    <main className="px-4 py-6 space-y-4">
+      {/* ── Masthead ──────────────────────────────────────────── */}
+      <div className="text-center pb-1">
+        <p className="eyebrow text-[10px]">
+          Season {String(SEASON.number).padStart(2, "0")}
+          {status.phase === "live" && ` · Day ${status.dayNumber}`}
+        </p>
+        <h1 className="font-display font-700 uppercase leading-[0.9] tracking-tight text-[34px] mt-1">
+          The Numbers
+          <br />
+          So Far
+        </h1>
+        <div className="flex items-center justify-center gap-3 mt-3">
+          <span className="h-px w-8 bg-ink-700" />
+          <span className="font-display font-600 uppercase tracking-[0.2em] text-tape text-[11px]">
+            Move-Athon Mania
+          </span>
+          <span className="h-px w-8 bg-ink-700" />
         </div>
-        <FaUsers className="text-4xl text-blue-700" />
       </div>
 
-      {/* Stats Summary */}
+      {/* ── Movers ────────────────────────────────────────────── */}
+      <div className="bib flex items-center justify-between px-5 pt-6 pb-4">
+        <div>
+          <p className="eyebrow text-[10px]">
+            {movers === 1 ? "Mover on the board" : "Movers on the board"}
+          </p>
+          <span className="readout text-[40px] leading-none block mt-1">
+            {movers}
+          </span>
+        </div>
+        <Users size={26} className="text-tape" strokeWidth={1.8} />
+      </div>
+
       <Stats
         total_distance={globalTotals.total_distance}
         cycling_distance={globalTotals.cycling_distance}
         running_distance={globalTotals.running_distance}
         walking_distance={globalTotals.walking_distance}
       />
+
+      {movers === 0 && (
+        <p className="split text-chalk-dim text-center pt-2">
+          Nothing logged yet. Be the first on the board.
+        </p>
+      )}
     </main>
   );
 }

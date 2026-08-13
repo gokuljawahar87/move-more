@@ -1,10 +1,11 @@
+// app/api/user/stats/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { SEASON, activeSeason } from "@/lib/season";
 
 // -------------------------------
 // 🔹 Same constants & logic as Team Performance
 // -------------------------------
-const CHALLENGE_START = new Date("2025-10-01T00:00:00+05:30");
 const EXCLUDE_START = new Date("2025-10-16T00:00:00+05:30");
 const WORK_START = { hour: 7, minute: 30 };
 const WORK_END = { hour: 15, minute: 45 };
@@ -66,7 +67,17 @@ export async function GET(req: Request) {
         )
       `)
       .eq("activities.is_valid", true)
-      .gte("activities.start_date", CHALLENGE_START.toISOString());
+      // Only the season currently on display: trial data before Sep 1,
+      // Season 2 after. Season 1 is never shown.
+      .eq("activities.season", activeSeason())
+      // Only members registered for this season — without this the
+      // participant count still included last season's 95 people.
+      .eq("season", SEASON.number);
+      // NOTE: the old `.gte("activities.start_date", CHALLENGE_START)`
+      // filter is gone. CHALLENGE_START now resolves to the season start
+      // (1 Sep), which is in the future during the trial — so it was
+      // excluding every activity and zeroing everyone's stats. The
+      // season column already scopes the data correctly.
 
     if (error) {
       console.error("❌ Supabase error:", error);

@@ -1,7 +1,8 @@
+// components/Header.tsx
 "use client";
 
-import { useEffect, useState } from "react";
-import { Menu, Link2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Menu, Link2, X } from "lucide-react";
 import UserStatsDrawer from "./UserStatsDrawer";
 import { SEASON, getSeasonStatus, type SeasonStatus } from "@/lib/season";
 
@@ -11,6 +12,32 @@ export function Header({ isGuest = false }: { isGuest?: boolean }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [status, setStatus] = useState<SeasonStatus | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close the profile menu on an outside tap or Escape. Without this the
+  // only way to dismiss it was tapping the avatar again, which isn't
+  // discoverable — it read as stuck open.
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
 
   useEffect(() => {
     if (isGuest) return;
@@ -76,10 +103,11 @@ export function Header({ isGuest = false }: { isGuest?: boolean }) {
           </div>
 
           {!isGuest && (
-            <div className="relative shrink-0">
+            <div className="relative shrink-0" ref={menuRef}>
               <button
                 onClick={() => setMenuOpen((v) => !v)}
                 aria-label="Your profile"
+                aria-expanded={menuOpen}
                 className="w-9 h-9 flex items-center justify-center rounded-full bg-tape text-ink-950 font-display font-700 text-sm"
               >
                 {initials || "—"}
@@ -87,7 +115,15 @@ export function Header({ isGuest = false }: { isGuest?: boolean }) {
 
               {menuOpen && (
                 <div className="absolute right-0 mt-2 w-60 bib p-4 z-50">
-                  <p className="font-display font-600 uppercase tracking-wide text-base pt-1">
+                  <button
+                    onClick={() => setMenuOpen(false)}
+                    aria-label="Close"
+                    className="absolute top-2.5 right-2.5 p-1 rounded text-chalk-dim hover:text-chalk hover:bg-ink-800 transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+
+                  <p className="font-display font-600 uppercase tracking-wide text-base pt-1 pr-6">
                     {profile?.first_name} {profile?.last_name}
                   </p>
                   {profile?.team && (

@@ -1,3 +1,4 @@
+// components/Activities.tsx
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -9,6 +10,8 @@ import {
   Bike,
   Activity as RunIcon,
 } from "lucide-react";
+import { SEASON } from "@/lib/season";
+import { teamLogo, teamName } from "@/lib/teams";
 
 type Act = {
   id: number | string;
@@ -32,18 +35,10 @@ const ALLOWED_TYPES = new Set([
   "Reclassified-Walk", // ✅ Include derived type
 ]);
 
-const challengeStart = new Date("2025-10-01T00:00:00+05:30");
+// Season dates come from lib/season.ts rather than being hardcoded.
+const challengeStart = SEASON.start;
 
-const teamLogos: Record<string, string> = {
-  "THE POWERHOUSE": "/logos/powerhouse.png",
-  "Corporate Crusaders": "/logos/crusaders.png",
-  "RAC ROCKERS": "/logos/rockers.png",
-  "ALPHA SQUAD": "/logos/alpha.png",
-  "Black Forest Brigade": "/logos/brigade.png",
-  "RACKETS": "/logos/rackets.png",
-  "VIBE TRIBE": "/logos/vibe.png",
-  "GOAT": "/logos/goat.png",
-};
+// Team logos now come from lib/teams.ts — see Leaderboard.tsx too.
 
 export function Activities() {
   const [activities, setActivities] = useState<Act[]>([]);
@@ -296,11 +291,11 @@ export function Activities() {
                         </div>
 
                         <div className="flex items-center gap-3">
-                          {a.profiles?.team && (
+                          {teamLogo(a.profiles?.team) && (
                             <img
-                              src={teamLogos[a.profiles.team] || "/logos/default.png"}
-                              alt={a.profiles.team}
-                              className="w-12 h-12 rounded-full object-cover border-2 border-gray-300"
+                              src={teamLogo(a.profiles?.team)!}
+                              alt={teamName(a.profiles?.team)}
+                              className="w-12 h-12 rounded-full object-cover ring-1 ring-ink-700"
                             />
                           )}
                           <a

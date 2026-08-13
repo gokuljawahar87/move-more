@@ -1,7 +1,11 @@
+// app/api/leaderboard/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { SEASON, activeSeason } from "@/lib/season";
 
-const CHALLENGE_START = new Date("2025-10-01T00:00:00+05:30");
+// Season dates now come from lib/season.ts, replacing the six
+// hardcoded copies of this constant.
+const CHALLENGE_START = SEASON.start;
 const EXCLUDE_START = new Date("2025-10-16T00:00:00+05:30");
 
 const WORK_START = { hour: 7, minute: 30 };
@@ -49,7 +53,13 @@ export async function GET() {
           is_valid
         )
       `)
-      .eq("activities.is_valid", true);
+      .eq("activities.is_valid", true)
+      // Only members registered for this season. Unregistered people
+      // (still tagged last season) are excluded entirely.
+      .eq("season", SEASON.number)
+      // Only the season currently on display: trial data before Sep 1,
+      // Season 2 after. Season 1 is never shown.
+      .eq("activities.season", activeSeason());
 
     if (error) throw error;
 
