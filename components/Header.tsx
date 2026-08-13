@@ -90,7 +90,14 @@ export function Header({ isGuest = false }: { isGuest?: boolean }) {
               <Menu size={20} />
             </button>
 
-            <img src="/logo.png" alt="" className="w-7 h-7 rounded" />
+            {/* A cropped runner mark, not the full poster — at 28px the
+                full artwork is illegible, and the title sits right
+                beside it anyway. */}
+            <img
+              src="/logo-mark.png"
+              alt=""
+              className="w-7 h-7 rounded-md object-cover ring-1 ring-ink-700"
+            />
 
             <div className="min-w-0 leading-none">
               <div className="font-display font-700 uppercase tracking-wide text-[15px] truncate">
