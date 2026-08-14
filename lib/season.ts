@@ -18,11 +18,24 @@ export const SEASON = {
   // Trial period — the app is open, but nothing here is ever scored.
   // Its purpose is to collect real fraud examples so the detection
   // thresholds can be tuned before Season 2 starts.
-  trialStart: new Date("2026-08-01T00:00:00+05:30"),
+  trialStart: new Date("2026-08-15T00:00:00+05:30"),
 
   // The Champions tab stays hidden until the season ends. Flip this to
   // true if you want to preview that tab before then.
   forceShowChampions: false,
+
+  // ── Office-hours exclusion ────────────────────────────────────────
+  // Activity overlapping this window on a working day is excluded from
+  // scoring and from streaks. Minutes from midnight, IST.
+  workHours: {
+    startMinute: 7 * 60 + 30, // 07:30
+    endMinute: 15 * 60 + 45, // 15:45
+  },
+
+  // ⬇️ Declared holidays — office hours are NOT excluded on these days.
+  // Season 1 had these hardcoded as 2025-10-20 / 21 in four separate
+  // route files; update the list here instead.
+  holidays: [] as string[],
 };
 
 /**

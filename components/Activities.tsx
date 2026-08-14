@@ -23,6 +23,7 @@ user_id: string; // ✅ Add this line
   moving_time: number;
   start_date: string;
   strava_url?: string;
+  on_leave_day?: boolean;
   profiles?: { first_name?: string; last_name?: string; team?: string };
 };
 
@@ -309,7 +310,24 @@ export function Activities() {
                         </div>
                       </div>
 
-                      <p className="text-md font-bold text-gray-800">{a.name}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-md font-bold text-gray-800">{a.name}</p>
+
+                        {/* Visible declaration — office-hours activity on a
+                            day the person marked as personal leave. */}
+                        {a.on_leave_day && (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+                                       text-[10px] font-semibold uppercase tracking-wider"
+                            style={{
+                              backgroundColor: "rgba(255,201,60,0.14)",
+                              color: "var(--tape)",
+                            }}
+                          >
+                            On leave
+                          </span>
+                        )}
+                      </div>
 
                       <div className="flex gap-3 items-center text-sm text-gray-700 mt-1">
                         {getIcon(isReclassified ? "Reclassified-Walk" : a.type)}

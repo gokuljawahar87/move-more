@@ -30,6 +30,25 @@ async function runRefresh() {
     return { refreshedUsers: 0, cleanedUsers: 0, note: "No profiles found" };
   }
 
+  // Declared leave days for everyone, fetched once rather than per user
+  const { data: allLeave } = await supabaseAdmin
+    .from("leave_days")
+    .select("user_id, leave_date, created_at");
+
+  const leaveByUser = new Map<string, Map<string, Date>>();
+  for (const l of allLeave || []) {
+    if (!leaveByUser.has(l.user_id)) leaveByUser.set(l.user_id, new Map());
+    leaveByUser.get(l.user_id)!.set(l.leave_date, new Date(l.created_at));
+  }
+
+  const istDay = (d: Date) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d);
+
   let refreshedUsers = 0;
   let cleanedUsers = 0;
   let totalUpserted = 0;
@@ -199,6 +218,12 @@ async function runRefresh() {
 
           // Which season this belongs to — trial data is tagged 0
           season: seasonForDate(new Date(a.start_date)),
+          on_leave_day: (() => {
+            const start = new Date(a.start_date);
+            const declaredAt = leaveByUser.get(profile.user_id)?.get(istDay(start));
+            // Same-day declarations only cover later activities
+            return !!declaredAt && start >= declaredAt;
+          })(),
 
           // ── Fraud-detection fields ──────────────────────────────
           // elapsed vs moving catches all-day recording;

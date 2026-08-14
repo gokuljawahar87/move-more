@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { SEASON, activeSeason } from "@/lib/season";
+import { computeStreaks } from "@/lib/streak";
 
 // -------------------------------
 // 🔹 Same constants & logic as Team Performance
@@ -63,7 +64,8 @@ export async function GET(req: Request) {
           distance,
           moving_time,
           start_date,
-          is_valid
+          is_valid,
+          on_leave_day
         )
       `)
       .eq("activities.is_valid", true)
@@ -99,6 +101,9 @@ export async function GET(req: Request) {
         teamRank: null,
         overallRank: null,
         totalParticipants: 0,
+        currentStreak: 0,
+        maxStreak: 0,
+        todayDone: false,
       });
     }
 
@@ -124,7 +129,8 @@ export async function GET(req: Request) {
       for (const a of profile.activities) {
         if (!a?.is_valid || !a.start_date) continue;
         const startUTC = new Date(a.start_date);
-        if (overlapsWorkingHours(startUTC, a.moving_time || 0)) continue;
+        // A declared leave day lifts the office-hours exclusion.
+        if (!a.on_leave_day && overlapsWorkingHours(startUTC, a.moving_time || 0)) continue;
 
         const km = Number(a.distance || 0) / 1000;
         const type = a.derived_type || a.type;
@@ -178,7 +184,10 @@ export async function GET(req: Request) {
     const myProfile = profiles.find((p) => p.user_id === user_id);
     const myActs =
       myProfile?.activities?.filter(
-        (a) => a?.is_valid && !overlapsWorkingHours(new Date(a.start_date), a.moving_time || 0)
+        (a) =>
+          a?.is_valid &&
+          (a.on_leave_day ||
+            !overlapsWorkingHours(new Date(a.start_date), a.moving_time || 0))
       ) || [];
 
     const totalActivities = myActs.length;
@@ -211,6 +220,10 @@ export async function GET(req: Request) {
           ) / 1000
         : null;
 
+    // 🔥 Streaks — a streak day needs ONE activity of 30+ minutes moving
+    // time, outside office hours. See lib/streak.ts for the rules.
+    const streaks = computeStreaks(myActs);
+
     // ✅ Return aligned with Team Performance
     return NextResponse.json({
       totalActivities,
@@ -226,6 +239,9 @@ export async function GET(req: Request) {
       teamRank,
       overallRank,
       totalParticipants,
+      currentStreak: streaks.currentStreak,
+      maxStreak: streaks.maxStreak,
+      todayDone: streaks.todayDone,
     });
   } catch (err: any) {
     console.error("❌ Error in /api/user/stats:", err);

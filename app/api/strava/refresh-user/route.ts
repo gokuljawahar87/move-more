@@ -133,6 +133,33 @@ export async function POST(req: Request) {
       });
     }
 
+    // ── Declared leave days ──────────────────────────────────────────
+    // Needed at sync time so activities arriving later still pick up an
+    // existing declaration.
+    const { data: leaveRows } = await supabaseAdmin
+      .from("leave_days")
+      .select("leave_date, created_at")
+      .eq("user_id", user_id);
+
+    const leaveMap = new Map(
+      (leaveRows || []).map((l: any) => [l.leave_date, new Date(l.created_at)])
+    );
+
+    const istDay = (d: Date) =>
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(d);
+
+    const onLeave = (startISO: string) => {
+      const start = new Date(startISO);
+      const declaredAt = leaveMap.get(istDay(start));
+      // Same-day declarations only cover activities started afterwards
+      return !!declaredAt && start >= declaredAt;
+    };
+
     // ── Respect locked rows ──────────────────────────────────────────
     const { data: existingActs } = await supabaseAdmin
       .from("activities")
@@ -174,6 +201,7 @@ export async function POST(req: Request) {
 
           // Which season this belongs to — trial data is tagged 0
           season: seasonForDate(new Date(a.start_date)),
+          on_leave_day: onLeave(a.start_date),
 
           // ── Fraud-detection fields ──────────────────────────────
           // elapsed vs moving catches all-day recording;

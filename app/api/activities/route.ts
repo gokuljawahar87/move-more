@@ -58,7 +58,8 @@ export async function GET() {
       moving_time,
       start_date,
       strava_url,
-      is_valid
+      is_valid,
+      on_leave_day
     )
   `)
   .eq("activities.is_valid", true)

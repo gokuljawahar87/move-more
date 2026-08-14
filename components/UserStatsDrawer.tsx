@@ -3,7 +3,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
-import { X, Loader2, Footprints, Bike, Activity } from "lucide-react";
+import { X, Loader2, Footprints, Bike, Activity, Flame, CalendarPlus, Check } from "lucide-react";
 
 interface UserStatsDrawerProps {
   isOpen: boolean;
@@ -18,6 +18,9 @@ export default function UserStatsDrawer({
 }: UserStatsDrawerProps) {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [leaveDays, setLeaveDays] = useState<string[]>([]);
+  const [today, setToday] = useState<string>("");
+  const [savingLeave, setSavingLeave] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !userId) return;
@@ -27,6 +30,10 @@ export default function UserStatsDrawer({
         const res = await fetch(`/api/user/stats?user_id=${userId}`);
         const data = await res.json();
         setStats(data);
+
+        const lv = await fetch("/api/leave").then((r) => r.json());
+        setLeaveDays(lv.days ?? []);
+        setToday(lv.today ?? "");
       } catch (err) {
         console.error("Failed to fetch user stats:", err);
       } finally {
@@ -144,6 +151,60 @@ export default function UserStatsDrawer({
                     </div>
                   </div>
 
+                  {/* 🔥 Streak — a streak day is one activity of 30+
+                      minutes, outside office hours. */}
+                  <div className="bib px-4 pt-6 pb-4 mb-4">
+                    <div className="flex items-center gap-1.5">
+                      <Flame
+                        size={13}
+                        className={
+                          stats.currentStreak > 0 ? "text-tape" : "text-chalk-dim"
+                        }
+                        strokeWidth={2.2}
+                      />
+                      <p className="eyebrow text-[9px]">Streak</p>
+                    </div>
+
+                    <div className="flex items-end justify-between mt-2">
+                      <div>
+                        <div className="flex items-baseline gap-1.5">
+                          <span
+                            className="readout text-[40px] leading-none"
+                            style={{
+                              color:
+                                stats.currentStreak > 0
+                                  ? "var(--tape)"
+                                  : "var(--chalk-dim)",
+                            }}
+                          >
+                            {stats.currentStreak ?? 0}
+                          </span>
+                          <span className="eyebrow text-[9px]">
+                            {stats.currentStreak === 1 ? "day" : "days"}
+                          </span>
+                        </div>
+                        <p className="split text-chalk-dim mt-1">
+                          {stats.currentStreak > 0
+                            ? stats.todayDone
+                              ? "Logged today"
+                              : "Today still open"
+                            : "No active streak"}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="readout text-xl block leading-none">
+                          {stats.maxStreak ?? 0}
+                        </span>
+                        <p className="eyebrow text-[9px] mt-1">Best</p>
+                      </div>
+                    </div>
+
+                    <p className="split text-chalk-dim mt-3 pt-3 border-t border-ink-800">
+                      30+ min in one activity, outside office hours
+                    </p>
+                  </div>
+
                   {/* Standings */}
                   <div className="grid grid-cols-2 gap-3 mb-4">
                     <Stat
@@ -167,6 +228,61 @@ export default function UserStatsDrawer({
                     <Row label="Points" value={Math.round(stats.totalPoints ?? 0)} />
                     <Row label="Activities" value={stats.totalActivities ?? 0} />
                     <Row label="Active days" value={stats.activeDays ?? 0} />
+                  </div>
+
+                  {/* ── Personal leave ──────────────────────────────
+                      Office hours are excluded from scoring. Marking a
+                      leave day lifts that, and shows an "On leave" tag
+                      on the activity for everyone to see. */}
+                  <div className="bib px-4 pt-5 pb-4 mb-4">
+                    <p className="eyebrow text-[9px]">Personal leave</p>
+                    <p className="split text-chalk-dim mt-1.5 leading-relaxed">
+                      Off work today? Mark it and your daytime activity will
+                      count. It shows publicly on your activity.
+                    </p>
+
+                    {leaveDays.includes(today) ? (
+                      <div className="mt-3 flex items-center gap-2">
+                        <Check size={14} className="text-walk" strokeWidth={3} />
+                        <span className="font-display font-600 uppercase tracking-wide text-sm text-walk">
+                          Today marked as leave
+                        </span>
+                      </div>
+                    ) : (
+                      <button
+                        disabled={savingLeave || !today}
+                        onClick={async () => {
+                          setSavingLeave(true);
+                          try {
+                            const r = await fetch("/api/leave", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ leave_date: today }),
+                            });
+                            const j = await r.json();
+                            if (r.ok) setLeaveDays((d) => [...d, today]);
+                            else alert(j.error ?? "Could not mark leave");
+                          } finally {
+                            setSavingLeave(false);
+                          }
+                        }}
+                        className="mt-3 w-full flex items-center justify-center gap-2
+                                   border border-ink-800 hover:border-tape hover:text-tape
+                                   text-chalk-dim py-2.5 rounded-lg font-display font-600
+                                   uppercase tracking-[0.1em] text-[12px] transition-colors
+                                   disabled:opacity-50"
+                      >
+                        <CalendarPlus size={14} />
+                        {savingLeave ? "Marking…" : "Mark today as leave"}
+                      </button>
+                    )}
+
+                    {leaveDays.length > 0 && (
+                      <p className="split text-chalk-dim mt-3 pt-3 border-t border-ink-800">
+                        {leaveDays.length} leave{" "}
+                        {leaveDays.length === 1 ? "day" : "days"} this season
+                      </p>
+                    )}
                   </div>
 
                   {/* Personal bests */}

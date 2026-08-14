@@ -50,7 +50,8 @@ export async function GET() {
           distance,
           moving_time,
           start_date,
-          is_valid
+          is_valid,
+          on_leave_day
         )
       `)
       .eq("activities.is_valid", true)
@@ -109,7 +110,8 @@ export async function GET() {
         if (!a?.is_valid || !a.start_date) continue;
 
         const startUTC = new Date(a.start_date);
-        if (overlapsWorkingHours(startUTC, a.moving_time || 0)) continue;
+        // A declared leave day lifts the office-hours exclusion.
+        if (!a.on_leave_day && overlapsWorkingHours(startUTC, a.moving_time || 0)) continue;
 
         const km = Number(a.distance || 0) / 1000;
         const type = a.derived_type || a.type;
