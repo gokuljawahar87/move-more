@@ -1,21 +1,24 @@
 // app/api/activities/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { SEASON, activeSeason } from "@/lib/season";
+import { SEASON, activeSeason, SYNC_FLOOR } from "@/lib/season";
 
 // Challenge start (1 Oct 2025 00:00 IST)
 // Season dates now come from lib/season.ts, replacing the six
 // hardcoded copies of this constant.
 const CHALLENGE_START = SEASON.start;
 // Work-hour exclusion active from 16 Oct 2025 00:00 IST
-const EXCLUDE_START = new Date("2025-10-16T00:00:00+05:30");
+// Exclusion applies from the start of the sync window, not a fixed
+// October 2025 date.
+const EXCLUDE_START = SYNC_FLOOR;
 
 // Work-hours (IST)
 const WORK_START = { hour: 7, minute: 30 };
 const WORK_END = { hour: 15, minute: 45 };
 
 // Holidays (YYYY-MM-DD)
-const HOLIDAYS = ["2025-10-20", "2025-10-21"];
+// Holidays now come from lib/season.ts
+const HOLIDAYS: string[] = (SEASON as any).holidays ?? [];
 
 // 🧩 Helper: check overlap between activity and office hours (excludes weekends & holidays)
 function overlapsWorkingHours(startUTC: Date, durationSec: number): boolean {
@@ -108,6 +111,8 @@ export async function GET() {
     const filtered = flat.filter((act) => {
       if (!act.start_date) return false;
       const startUTC = new Date(act.start_date);
+      // A declared leave day lifts the office-hours exclusion.
+      if (act.on_leave_day) return true;
       return !overlapsWorkingHours(startUTC, act.moving_time || 0);
     });
 
@@ -115,6 +120,7 @@ export async function GET() {
     const formatted = filtered.map((act) => ({
       id: act.id,
       name: act.name,
+      on_leave_day: act.on_leave_day ?? false,
       type: act.derived_type || act.type,
       derived_type: act.derived_type,
       distance: act.distance,

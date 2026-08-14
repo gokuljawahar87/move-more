@@ -1,16 +1,19 @@
 // app/api/user/stats/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { SEASON, activeSeason } from "@/lib/season";
+import { SEASON, activeSeason, SYNC_FLOOR } from "@/lib/season";
 import { computeStreaks } from "@/lib/streak";
 
 // -------------------------------
 // 🔹 Same constants & logic as Team Performance
 // -------------------------------
-const EXCLUDE_START = new Date("2025-10-16T00:00:00+05:30");
+// Exclusion applies from the start of the sync window, not a fixed
+// October 2025 date.
+const EXCLUDE_START = SYNC_FLOOR;
 const WORK_START = { hour: 7, minute: 30 };
 const WORK_END = { hour: 15, minute: 45 };
-const HOLIDAYS = ["2025-10-20", "2025-10-21"];
+// Holidays now come from lib/season.ts
+const HOLIDAYS: string[] = (SEASON as any).holidays ?? [];
 
 // 🕒 Check if overlaps office hours (7:30–15:45 IST)
 function overlapsWorkingHours(startUTC: Date, durationSec: number): boolean {
