@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Footprints, Medal, Users, BarChart3, Trophy, Swords } from "lucide-react";
+import { User, Footprints, Medal, Users, BarChart3, Trophy, Swords } from "lucide-react";
 import { showChampions } from "@/lib/season";
 
 type Tab =
   | "activities"
   | "leaderboard"
+  | "you"
   | "challenges"
   | "teams"
   | "stats"
@@ -15,6 +16,8 @@ type Tab =
 type Props = {
   activeTab: Tab;
   setActiveTab: (tab: Tab) => void;
+  /** Guests have no personal page, so the You tab is hidden for them */
+  isGuest?: boolean;
 };
 
 const TABS: {
@@ -24,6 +27,7 @@ const TABS: {
   /** Only revealed once the season has ended */
   finaleOnly?: boolean;
 }[] = [
+  { id: "you", label: "You", Icon: User },
   { id: "activities", label: "Feed", Icon: Footprints },
   { id: "leaderboard", label: "Ranks", Icon: Medal },
   { id: "challenges", label: "Weekly", Icon: Swords },
@@ -32,7 +36,11 @@ const TABS: {
   { id: "championship", label: "Champions", Icon: Trophy, finaleOnly: true },
 ];
 
-export default function BottomNav({ activeTab, setActiveTab }: Props) {
+export default function BottomNav({
+  activeTab,
+  setActiveTab,
+  isGuest = false,
+}: Props) {
   // Resolved after mount rather than during render. The server and the
   // browser can sit either side of the season end, and a mismatch there
   // would cause a hydration error.
@@ -50,7 +58,10 @@ export default function BottomNav({ activeTab, setActiveTab }: Props) {
     }
   }, [finaleUnlocked, activeTab, setActiveTab]);
 
-  const visibleTabs = TABS.filter((t) => !t.finaleOnly || finaleUnlocked);
+  const visibleTabs = TABS.filter(
+    (t) =>
+      (!t.finaleOnly || finaleUnlocked) && !(isGuest && t.id === "you")
+  );
 
   return (
     <nav

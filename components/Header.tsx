@@ -2,14 +2,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Menu, Link2, X } from "lucide-react";
-import UserStatsDrawer from "./UserStatsDrawer";
+import { Link2, X } from "lucide-react";
 import { SEASON, getSeasonStatus, type SeasonStatus } from "@/lib/season";
 
 export function Header({ isGuest = false }: { isGuest?: boolean }) {
   const [initials, setInitials] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [status, setStatus] = useState<SeasonStatus | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -81,14 +79,6 @@ export function Header({ isGuest = false }: { isGuest?: boolean }) {
       <header className="relative z-40 shrink-0 bg-ink-950 border-b border-ink-800">
         <div className="flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-2.5 min-w-0">
-            <button
-              onClick={() => !isGuest && setSidebarOpen(true)}
-              disabled={isGuest}
-              aria-label="Open your stats"
-              className="p-1.5 -ml-1.5 rounded-lg text-chalk-dim hover:text-chalk hover:bg-ink-800 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-            >
-              <Menu size={20} />
-            </button>
 
             {/* A cropped runner mark, not the full poster — at 28px the
                 full artwork is illegible, and the title sits right
@@ -112,7 +102,7 @@ export function Header({ isGuest = false }: { isGuest?: boolean }) {
           {!isGuest && (
             <div className="relative shrink-0" ref={menuRef}>
               <button
-                onClick={() => setMenuOpen((v) => !v)}
+                onClick={() => setMenuOpen((v: boolean) => !v)}
                 aria-label="Your profile"
                 aria-expanded={menuOpen}
                 className="w-9 h-9 flex items-center justify-center rounded-full bg-tape text-ink-950 font-display font-700 text-sm"
@@ -216,14 +206,6 @@ export function Header({ isGuest = false }: { isGuest?: boolean }) {
           </div>
         )}
       </header>
-
-      {!isGuest && (
-        <UserStatsDrawer
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          userId={profile?.user_id || null}
-        />
-      )}
     </>
   );
 }

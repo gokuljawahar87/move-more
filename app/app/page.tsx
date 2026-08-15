@@ -10,12 +10,14 @@ import { Header } from "@/components/Header";
 import StatsPage from "./stats/page";
 import PointsChampions from "@/components/PointsChampions";
 import Challenges from "@/components/Challenges";
+import You from "@/components/You";
 import BottomNav from "@/components/BottomNav";
 import { showChampions } from "@/lib/season";
 
 type Tab =
   | "activities"
   | "leaderboard"
+  | "you"
   | "challenges"
   | "teams"
   | "stats"
@@ -37,7 +39,7 @@ function isRegisteredThisSeason(profile: any): boolean {
 }
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState<Tab>("activities");
+  const [activeTab, setActiveTab] = useState<Tab>("you");
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
   const router = useRouter();
@@ -46,6 +48,8 @@ function AppContent() {
   useEffect(() => {
     const guestMode = searchParams?.get("guest") === "true";
     setIsGuest(guestMode);
+    // Guests have no personal page, so start them on the feed
+    if (guestMode) setActiveTab("activities");
 
     async function checkProfile() {
       if (guestMode) {
@@ -117,6 +121,7 @@ function AppContent() {
 
   const tabs = (
     <>
+      {activeTab === "you" && <You />}
       {activeTab === "activities" && <Activities />}
       {activeTab === "leaderboard" && <Leaderboard />}
       {activeTab === "challenges" && <Challenges />}
@@ -138,7 +143,11 @@ function AppContent() {
 
         <div className="flex-1 overflow-y-auto pb-32 px-2 sm:px-6">{tabs}</div>
 
-        <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+        <BottomNav
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          isGuest
+        />
 
         <div className="py-3 text-center border-t border-ink-800">
           <button
