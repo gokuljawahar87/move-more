@@ -3,7 +3,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
-import { X, Loader2, Footprints, Bike, Activity, Flame, CalendarPlus, Check } from "lucide-react";
+import { X, Loader2, Footprints, Bike, Activity, Flame, CalendarPlus, Check, TrendingUp } from "lucide-react";
 
 interface UserStatsDrawerProps {
   isOpen: boolean;
@@ -228,6 +228,56 @@ export default function UserStatsDrawer({
                     <Row label="Points" value={Math.round(stats.totalPoints ?? 0)} />
                     <Row label="Activities" value={stats.totalActivities ?? 0} />
                     <Row label="Active days" value={stats.activeDays ?? 0} />
+                  </div>
+
+                  {/* ── Weekly averages ────────────────────────────
+                      Averaged over active days, not calendar days —
+                      the same basis Sunday's "Better Than Before"
+                      challenge uses, so the number here is the number
+                      to beat. */}
+                  <div className="bib px-4 pt-5 pb-4 mb-4">
+                    <div className="flex items-center gap-1.5">
+                      <TrendingUp size={13} className="text-tape" strokeWidth={2.2} />
+                      <p className="eyebrow text-[9px]">Distance per active day</p>
+                    </div>
+
+                    <div className="flex items-end gap-6 mt-2.5">
+                      <div>
+                        <div className="flex items-baseline gap-1">
+                          <span className="readout text-[28px] leading-none text-tape">
+                            {(stats.thisWeekAvgKm ?? 0).toFixed(1)}
+                          </span>
+                          <span className="eyebrow text-[9px]">km</span>
+                        </div>
+                        <p className="eyebrow text-[9px] mt-1.5">This week</p>
+                        <p className="split text-chalk-dim mt-0.5">
+                          {stats.thisWeekActiveDays ?? 0} active{" "}
+                          {stats.thisWeekActiveDays === 1 ? "day" : "days"}
+                        </p>
+                      </div>
+
+                      <div>
+                        <div className="flex items-baseline gap-1">
+                          <span className="readout text-[28px] leading-none text-chalk-dim">
+                            {(stats.lastWeekAvgKm ?? 0).toFixed(1)}
+                          </span>
+                          <span className="eyebrow text-[9px]">km</span>
+                        </div>
+                        <p className="eyebrow text-[9px] mt-1.5">Last week</p>
+                        <p className="split text-chalk-dim mt-0.5">
+                          {stats.lastWeekActiveDays ?? 0} active{" "}
+                          {stats.lastWeekActiveDays === 1 ? "day" : "days"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="split text-chalk-dim mt-3 pt-3 border-t border-ink-800">
+                      Sunday&apos;s challenge asks you to beat{" "}
+                      <span className="text-tape">
+                        {(stats.rolling7AvgKm ?? 0).toFixed(1)} km
+                      </span>{" "}
+                      — your average over the last 7 days.
+                    </p>
                   </div>
 
                   {/* ── Personal leave ──────────────────────────────

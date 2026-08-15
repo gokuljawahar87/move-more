@@ -12,13 +12,20 @@ export const SEASON = {
   tagline: "Season Two",
 
   // ⬇️ SET YOUR REAL DATES HERE
+  //
+  // The challenge weeks run Monday–Sunday so the winner is settled by
+  // Monday morning. 1 Sep is a Tuesday, so week 1 is a 6-day week
+  // (Tue–Sun) and every week after is a full Mon–Sun.
+  //
+  // Ending on Sunday 25 Oct gives exactly 8 weeks. Ending 31 Oct would
+  // give 9, the last a 6-day stub finishing on a Saturday.
   start: new Date("2026-09-01T00:00:00+05:30"),
-  end: new Date("2026-09-30T22:00:00+05:30"),
+  end: new Date("2026-10-25T22:00:00+05:30"),
 
   // Trial period — the app is open, but nothing here is ever scored.
   // Its purpose is to collect real fraud examples so the detection
   // thresholds can be tuned before Season 2 starts.
-  trialStart: new Date("2026-08-01T00:00:00+05:30"),
+  trialStart: new Date("2026-08-15T00:00:00+05:30"),
 
   // The Champions tab stays hidden until the season ends. Flip this to
   // true if you want to preview that tab before then.

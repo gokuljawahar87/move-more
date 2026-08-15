@@ -9,10 +9,17 @@ import { TeamPerformance } from "@/components/TeamPerformance";
 import { Header } from "@/components/Header";
 import StatsPage from "./stats/page";
 import PointsChampions from "@/components/PointsChampions";
+import Challenges from "@/components/Challenges";
 import BottomNav from "@/components/BottomNav";
 import { showChampions } from "@/lib/season";
 
-type Tab = "activities" | "leaderboard" | "teams" | "stats" | "championship";
+type Tab =
+  | "activities"
+  | "leaderboard"
+  | "challenges"
+  | "teams"
+  | "stats"
+  | "championship";
 
 /**
  * Is this profile response good enough to enter the app?
@@ -112,6 +119,7 @@ function AppContent() {
     <>
       {activeTab === "activities" && <Activities />}
       {activeTab === "leaderboard" && <Leaderboard />}
+      {activeTab === "challenges" && <Challenges />}
       {activeTab === "teams" && <TeamPerformance />}
       {activeTab === "stats" && <StatsPage />}
       {activeTab === "championship" && showChampions() && <PointsChampions />}

@@ -2,7 +2,8 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { SEASON, activeSeason, SYNC_FLOOR } from "@/lib/season";
-import { computeStreaks } from "@/lib/streak";
+import { computeStreaks, istDayKey } from "@/lib/streak";
+import { mondayOf, addDays } from "@/lib/challenges";
 
 // -------------------------------
 // 🔹 Same constants & logic as Team Performance
@@ -104,6 +105,11 @@ export async function GET(req: Request) {
         teamRank: null,
         overallRank: null,
         totalParticipants: 0,
+        thisWeekAvgKm: 0,
+        thisWeekActiveDays: 0,
+        lastWeekAvgKm: 0,
+        lastWeekActiveDays: 0,
+        rolling7AvgKm: 0,
         currentStreak: 0,
         maxStreak: 0,
         todayDone: false,
@@ -223,6 +229,37 @@ export async function GET(req: Request) {
           ) / 1000
         : null;
 
+    // ── Daily averages ───────────────────────────────────────────
+    // Averaged over ACTIVE days only, matching how the Sunday
+    // "Better Than Before" challenge works — an average diluted by rest
+    // days would understate the bar people actually have to clear.
+    const kmByDay = new Map<string, number>();
+    for (const a of myActs) {
+      if (a?.is_valid === false || !a?.start_date) continue;
+      const key = istDayKey(new Date(a.start_date));
+      kmByDay.set(key, (kmByDay.get(key) ?? 0) + (Number(a.distance) || 0) / 1000);
+    }
+
+    const avgOver = (from: string, toExclusive: string) => {
+      const vals = [...kmByDay.entries()]
+        .filter(([d, v]) => d >= from && d < toExclusive && v > 0)
+        .map(([, v]) => v);
+      if (!vals.length) return { avg: 0, activeDays: 0 };
+      return {
+        avg: vals.reduce((s, v) => s + v, 0) / vals.length,
+        activeDays: vals.length,
+      };
+    };
+
+    const todayKey = istDayKey(new Date());
+    const thisMonday = mondayOf(todayKey);
+    const lastMonday = addDays(thisMonday, -7);
+
+    const thisWeek = avgOver(thisMonday, addDays(thisMonday, 7));
+    const lastWeek = avgOver(lastMonday, thisMonday);
+    // The figure Sunday's challenge actually compares against
+    const rolling7 = avgOver(addDays(todayKey, -7), todayKey);
+
     // 🔥 Streaks — a streak day needs ONE activity of 30+ minutes moving
     // time, outside office hours. See lib/streak.ts for the rules.
     const streaks = computeStreaks(myActs);
@@ -242,6 +279,11 @@ export async function GET(req: Request) {
       teamRank,
       overallRank,
       totalParticipants,
+      thisWeekAvgKm: thisWeek.avg,
+      thisWeekActiveDays: thisWeek.activeDays,
+      lastWeekAvgKm: lastWeek.avg,
+      lastWeekActiveDays: lastWeek.activeDays,
+      rolling7AvgKm: rolling7.avg,
       currentStreak: streaks.currentStreak,
       maxStreak: streaks.maxStreak,
       todayDone: streaks.todayDone,

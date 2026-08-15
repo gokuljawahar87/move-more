@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Footprints, Medal, Users, BarChart3, Trophy } from "lucide-react";
+import { Footprints, Medal, Users, BarChart3, Trophy, Swords } from "lucide-react";
 import { showChampions } from "@/lib/season";
 
-type Tab = "activities" | "leaderboard" | "teams" | "stats" | "championship";
+type Tab =
+  | "activities"
+  | "leaderboard"
+  | "challenges"
+  | "teams"
+  | "stats"
+  | "championship";
 
 type Props = {
   activeTab: Tab;
@@ -20,6 +26,7 @@ const TABS: {
 }[] = [
   { id: "activities", label: "Feed", Icon: Footprints },
   { id: "leaderboard", label: "Ranks", Icon: Medal },
+  { id: "challenges", label: "Weekly", Icon: Swords },
   { id: "teams", label: "Teams", Icon: Users },
   { id: "stats", label: "Stats", Icon: BarChart3 },
   { id: "championship", label: "Champions", Icon: Trophy, finaleOnly: true },
@@ -53,7 +60,7 @@ export default function BottomNav({ activeTab, setActiveTab }: Props) {
         paddingBottom: "env(safe-area-inset-bottom)",
       }}
     >
-      <div className="flex justify-around items-stretch max-w-2xl mx-auto px-1.5 py-2">
+      <div className="flex justify-around items-stretch max-w-2xl mx-auto px-1 py-2">
         {visibleTabs.map(({ id, label, Icon }) => {
           const active = activeTab === id;
           return (
@@ -64,19 +71,19 @@ export default function BottomNav({ activeTab, setActiveTab }: Props) {
               className="flex-1 flex flex-col items-center gap-1 group"
             >
               <span
-                className={`flex items-center justify-center h-7 w-[52px] rounded-full transition-colors duration-200 ${
+                className={`flex items-center justify-center h-7 w-[44px] rounded-full transition-colors duration-200 ${
                   active ? "bg-tape" : "bg-transparent group-hover:bg-ink-800"
                 }`}
               >
                 <Icon
-                  size={18}
+                  size={17}
                   strokeWidth={active ? 2.5 : 1.9}
                   className={active ? "text-ink-950" : "text-chalk-dim"}
                 />
               </span>
 
               <span
-                className={`font-display uppercase tracking-[0.09em] text-[9.5px] leading-none transition-colors ${
+                className={`font-display uppercase tracking-[0.09em] text-[9px] leading-none transition-colors ${
                   active ? "text-tape font-700" : "text-chalk-dim font-500"
                 }`}
               >
