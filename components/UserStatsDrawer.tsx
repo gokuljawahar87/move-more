@@ -230,53 +230,78 @@ export default function UserStatsDrawer({
                     <Row label="Active days" value={stats.activeDays ?? 0} />
                   </div>
 
-                  {/* ── Weekly averages ────────────────────────────
-                      Averaged over active days, not calendar days —
-                      the same basis Sunday's "Better Than Before"
-                      challenge uses, so the number here is the number
-                      to beat. */}
+                  {/* ── Week vs week ───────────────────────────────
+                      Two totals and the gap between them. Sunday's
+                      challenge is simply to finish the week ahead of
+                      last week's number. */}
                   <div className="bib px-4 pt-5 pb-4 mb-4">
                     <div className="flex items-center gap-1.5">
                       <TrendingUp size={13} className="text-tape" strokeWidth={2.2} />
-                      <p className="eyebrow text-[9px]">Distance per active day</p>
+                      <p className="eyebrow text-[9px]">Week on week</p>
                     </div>
 
-                    <div className="flex items-end gap-6 mt-2.5">
+                    <div className="flex items-end justify-between mt-3">
                       <div>
                         <div className="flex items-baseline gap-1">
-                          <span className="readout text-[28px] leading-none text-tape">
-                            {(stats.thisWeekAvgKm ?? 0).toFixed(1)}
+                          <span className="readout text-[34px] leading-none text-tape">
+                            {(stats.thisWeekKm ?? 0).toFixed(1)}
                           </span>
                           <span className="eyebrow text-[9px]">km</span>
                         </div>
                         <p className="eyebrow text-[9px] mt-1.5">This week</p>
-                        <p className="split text-chalk-dim mt-0.5">
-                          {stats.thisWeekActiveDays ?? 0} active{" "}
-                          {stats.thisWeekActiveDays === 1 ? "day" : "days"}
-                        </p>
                       </div>
 
-                      <div>
-                        <div className="flex items-baseline gap-1">
-                          <span className="readout text-[28px] leading-none text-chalk-dim">
-                            {(stats.lastWeekAvgKm ?? 0).toFixed(1)}
+                      <div className="text-right">
+                        <div className="flex items-baseline gap-1 justify-end">
+                          <span className="readout text-[22px] leading-none text-chalk-dim">
+                            {(stats.lastWeekKm ?? 0).toFixed(1)}
                           </span>
                           <span className="eyebrow text-[9px]">km</span>
                         </div>
                         <p className="eyebrow text-[9px] mt-1.5">Last week</p>
-                        <p className="split text-chalk-dim mt-0.5">
-                          {stats.lastWeekActiveDays ?? 0} active{" "}
-                          {stats.lastWeekActiveDays === 1 ? "day" : "days"}
-                        </p>
                       </div>
                     </div>
 
-                    <p className="split text-chalk-dim mt-3 pt-3 border-t border-ink-800">
-                      Sunday&apos;s challenge asks you to beat{" "}
-                      <span className="text-tape">
-                        {(stats.rolling7AvgKm ?? 0).toFixed(1)} km
-                      </span>{" "}
-                      — your average over the last 7 days.
+                    {/* How far along, as a bar against last week's total */}
+                    <div className="mt-3 h-2 w-full rounded-full overflow-hidden bg-ink-800">
+                      <div
+                        className="h-full transition-all duration-700"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            (stats.lastWeekKm ?? 0) > 0
+                              ? ((stats.thisWeekKm ?? 0) / stats.lastWeekKm) * 100
+                              : (stats.thisWeekKm ?? 0) > 0
+                              ? 100
+                              : 0
+                          )}%`,
+                          backgroundColor:
+                            (stats.thisWeekKm ?? 0) > (stats.lastWeekKm ?? 0)
+                              ? "var(--walk)"
+                              : "var(--tape)",
+                        }}
+                      />
+                    </div>
+
+                    <p className="split text-chalk-dim mt-2.5 leading-relaxed">
+                      {(stats.lastWeekKm ?? 0) <= 0 ? (
+                        "No distance last week — anything you do this week beats it."
+                      ) : (stats.thisWeekKm ?? 0) > (stats.lastWeekKm ?? 0) ? (
+                        <>
+                          You&apos;re{" "}
+                          <span className="text-walk">
+                            {((stats.thisWeekKm ?? 0) - stats.lastWeekKm).toFixed(1)} km
+                          </span>{" "}
+                          ahead of last week.
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-tape">
+                            {(stats.lastWeekKm - (stats.thisWeekKm ?? 0)).toFixed(1)} km
+                          </span>{" "}
+                          to go to beat last week.
+                        </>
+                      )}
                     </p>
                   </div>
 

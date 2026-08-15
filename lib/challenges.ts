@@ -54,7 +54,7 @@ export type DayActivity = {
 // ═══════════════════════════════════════════════════════════════
 
 export const CHALLENGES: Challenge[] = [
-  { id: "beat-avg", title: "Better Than Before", blurb: "Cover more distance today than your own 7-day daily average", family: "personal-best", icon: "trending", difficulty: "hard", points: 30 },
+  { id: "beat-avg", title: "Better Than Before", blurb: "Cover more total distance this week than you did last week", family: "personal-best", icon: "trending", difficulty: "hard", points: 30 },
   { id: "day-10", title: "Ten Total", blurb: "Across the day: 10 km on foot, or 40 km cycling", family: "day-total", icon: "route", difficulty: "hard", points: 30, footKm: 10, cycleKm: 40 },
   { id: "day-5", title: "Five Total", blurb: "Across the day: 5 km on foot, or 15 km cycling", family: "day-total", icon: "route", difficulty: "easy", points: 10, footKm: 5, cycleKm: 15 },
   { id: "day-6", title: "Six Total", blurb: "Across the day: 6 km on foot, or 18 km cycling", family: "day-total", icon: "route", difficulty: "easy", points: 10, footKm: 6, cycleKm: 18 },
@@ -278,7 +278,9 @@ export type ChallengeResult = Challenge & {
 function progressFor(
   c: Challenge,
   acts: DayActivity[],
-  history: DayActivity[]
+  history: DayActivity[],
+  dayKey: string,
+  allActs: DayActivity[]
 ): number {
   const footActs = acts.filter((a) => kindOf(a) === "run" || kindOf(a) === "walk");
   const cycleActs = acts.filter((a) => kindOf(a) === "cycle");
@@ -345,25 +347,31 @@ function progressFor(
     }
 
     case "personal-best": {
-      // Compare today's total distance against the average of the
-      // person's ACTIVE days over the previous 7 — rest days are
-      // excluded, so the bar is their typical effort, not a figure
-      // diluted by days off.
-      const today = acts.reduce((s, a) => s + km(a), 0);
-      if (today <= 0) return 0;
+      // Beat last week's total distance.
+      //
+      // Deliberately simple: one number to beat, fixed for the whole
+      // week. The earlier version compared against a rolling 7-day
+      // average, which moved every day and nobody could plan against.
+      const thisMonday = mondayOf(dayKey);
+      const lastMonday = addDays(thisMonday, -7);
 
-      const byDay = new Map<string, number>();
-      for (const a of history) {
-        const key = istDayKey(new Date(a.start_date));
-        byDay.set(key, (byDay.get(key) ?? 0) + km(a));
-      }
-      const activeDays = [...byDay.values()].filter((v) => v > 0);
+      const totalBetween = (from: string, toInclusive: string) =>
+        allActs
+          .filter((a) => {
+            if (a.is_valid === false) return false;
+            const k = istDayKey(new Date(a.start_date));
+            return k >= from && k <= toInclusive;
+          })
+          .reduce((sum, a) => sum + km(a), 0);
 
-      // No history yet — anything counts. You can't beat nothing.
-      if (!activeDays.length) return 1;
+      // This week counts up to and including the day being evaluated
+      const thisWeek = totalBetween(thisMonday, dayKey);
+      const lastWeek = totalBetween(lastMonday, addDays(thisMonday, -1));
 
-      const avg = activeDays.reduce((s, v) => s + v, 0) / activeDays.length;
-      return ratio(today, avg);
+      // Nothing last week to beat — any distance takes it
+      if (lastWeek <= 0) return thisWeek > 0 ? 1 : 0;
+
+      return thisWeek > lastWeek ? 1 : clamp01(thisWeek / lastWeek) * 0.99;
     }
 
     default:
@@ -399,7 +407,7 @@ export function evaluateDay(
   );
 
   const results = challengesForDate(dayKey).map((c) => {
-    const p = clamp01(progressFor(c, todays, history));
+    const p = clamp01(progressFor(c, todays, history, dayKey, activities));
     return { ...c, progress: p, completed: p >= 1 };
   });
 

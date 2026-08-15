@@ -207,7 +207,7 @@ export default function Challenges() {
           </div>
 
           <button
-            onClick={() => setShowBoard((v) => !v)}
+            onClick={() => setShowBoard((v: boolean) => !v)}
             className="w-full flex items-center justify-center gap-1.5 py-2 font-display uppercase tracking-[0.12em] text-[11px] text-chalk-dim hover:text-chalk transition-colors"
           >
             {showBoard ? "Hide" : "Show full"} leaderboard
