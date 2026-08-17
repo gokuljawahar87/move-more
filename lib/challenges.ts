@@ -54,6 +54,15 @@ export type DayActivity = {
 // ═══════════════════════════════════════════════════════════════
 
 export const CHALLENGES: Challenge[] = [
+  // ── TEST CHALLENGES ─────────────────────────────────────────
+  // Only scheduled while TEST_MODE is on. Delete this block, the
+  // TEST_SCHEDULE below and the TEST_MODE flag once the trial run is
+  // finished — none of it is used during the real season.
+  { id: "test-points-60", title: "Sixty Points", blurb: "Earn 60 points today", family: "points", icon: "target", difficulty: "easy", points: 10, target: 60 },
+  { id: "test-walk-1", title: "One Kilometre Walk", blurb: "Walk at least 1 km", family: "walk-distance", icon: "route", difficulty: "easy", points: 10, footKm: 1 },
+  { id: "test-run-pace", title: "Run at 8:30", blurb: "Run at least 1 km at 8:30/km or better", family: "run-pace", icon: "zap", difficulty: "easy", points: 10, paceMin: 8.5, km: 1 },
+  { id: "test-cycle-15", title: "Fifteen on the Bike", blurb: "Cycle for 15 minutes or more", family: "cycle-duration", icon: "clock", difficulty: "easy", points: 10, minutes: 15 },
+
   { id: "beat-avg", title: "Better Than Before", blurb: "Cover more total distance this week than you did last week", family: "personal-best", icon: "trending", difficulty: "hard", points: 30 },
   { id: "day-10", title: "Ten Total", blurb: "Across the day: 10 km on foot, or 40 km cycling", family: "day-total", icon: "route", difficulty: "hard", points: 30, footKm: 10, cycleKm: 40 },
   { id: "day-5", title: "Five Total", blurb: "Across the day: 5 km on foot, or 15 km cycling", family: "day-total", icon: "route", difficulty: "easy", points: 10, footKm: 5, cycleKm: 15 },
@@ -162,11 +171,52 @@ export const SCHEDULE: Record<string, string[]> = {
   "2026-10-25": ["one-10", "early-530", "beat-avg"], // Sun
 };
 
-export const TOTAL_WEEKS = 8;
+// ═══════════════════════════════════════════════════════════════
+// TEST MODE
+//
+// Set to false to return to the real Season 2 schedule. While it is
+// on, the challenge system anchors to 17 Aug instead of 1 Sep and runs
+// the four test challenges every day to 31 Aug, so the whole chain —
+// Strava sync, evaluation, points, leaderboard — can be verified before
+// the season opens. Nothing outside this file is affected.
+// ═══════════════════════════════════════════════════════════════
+
+export const TEST_MODE = true;
+
+const TEST_ANCHOR = "2026-08-17"; // a Monday, so test weeks align
+
+const TEST_IDS = [
+  "test-points-60",
+  "test-walk-1",
+  "test-run-pace",
+  "test-cycle-15",
+];
+
+function buildTestSchedule(): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  let d = TEST_ANCHOR;
+  while (d <= "2026-08-31") {
+    out[d] = [...TEST_IDS];
+    d = addDays(d, 1);
+  }
+  return out;
+}
+
+/** Where the challenge weeks start counting from. */
+const CHALLENGE_ANCHOR: string = TEST_MODE ? TEST_ANCHOR : "";
+
+// 8 real season weeks. While testing, only the three weeks covering
+// 17–31 Aug, so the champion boxes don't show empty future weeks.
+export const TOTAL_WEEKS = TEST_MODE ? 3 : 8;
+
+/** The live schedule: the real season, plus test days when TEST_MODE. */
+const ACTIVE_SCHEDULE: Record<string, string[]> = TEST_MODE
+  ? { ...buildTestSchedule(), ...SCHEDULE }
+  : SCHEDULE;
 
 /** Challenges for an IST date. Empty outside the season. */
 export function challengesForDate(dayKey: string): Challenge[] {
-  return (SCHEDULE[dayKey] ?? []).map((id) => BY_ID[id]).filter(Boolean);
+  return (ACTIVE_SCHEDULE[dayKey] ?? []).map((id) => BY_ID[id]).filter(Boolean);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -192,10 +242,15 @@ export function addDays(dayKey: string, n: number): string {
   return dt.toISOString().slice(0, 10);
 }
 
+/** Day the challenge weeks count from — the test anchor, or 1 Sep. */
+function anchorDay(): string {
+  return CHALLENGE_ANCHOR || istDayKey(SEASON.start);
+}
+
 export function seasonWeek(date: Date): number {
-  const seasonMonday = mondayOf(istDayKey(SEASON.start));
+  const seasonMonday = mondayOf(anchorDay());
   const dayKey = istDayKey(date);
-  if (dayKey < istDayKey(SEASON.start)) return 0;
+  if (dayKey < anchorDay()) return 0;
   const diff =
     (Date.parse(`${mondayOf(dayKey)}T00:00:00Z`) -
       Date.parse(`${seasonMonday}T00:00:00Z`)) /
@@ -205,10 +260,10 @@ export function seasonWeek(date: Date): number {
 
 /** The days of a season week that actually fall inside the season. */
 export function weekDays(week: number): string[] {
-  const seasonMonday = mondayOf(istDayKey(SEASON.start));
+  const seasonMonday = mondayOf(anchorDay());
   const monday = addDays(seasonMonday, (week - 1) * 7);
   return Array.from({ length: 7 }, (_, i) => addDays(monday, i)).filter(
-    (d) => SCHEDULE[d]
+    (d) => ACTIVE_SCHEDULE[d]
   );
 }
 
@@ -335,6 +390,32 @@ function progressFor(
         acts.filter((a) => mins(a) >= need).map(kindOf).filter((k) => k !== "other")
       );
       return ratio(kinds.size, 3);
+    }
+
+    // ── Test-only families ──────────────────────────────────────
+    case "walk-distance": {
+      // Walking specifically — not "on foot", so a run doesn't count
+      const walked = acts
+        .filter((a) => kindOf(a) === "walk")
+        .reduce((sum, a) => sum + km(a), 0);
+      return ratio(walked, c.footKm ?? 0);
+    }
+
+    case "run-pace": {
+      // Note: the sync reclassifies runs slower than 8.5 min/km as
+      // walks, so this checks derived type as everything else does.
+      const runs = acts.filter((a) => kindOf(a) === "run" && km(a) >= (c.km ?? 0));
+      if (!runs.length) return 0;
+      const best = Math.min(...runs.map((a) => mins(a) / km(a)));
+      return best <= (c.paceMin ?? 0) ? 1 : 0.6;
+    }
+
+    case "cycle-duration": {
+      const longest = Math.max(
+        0,
+        ...acts.filter((a) => kindOf(a) === "cycle").map(mins)
+      );
+      return ratio(longest, c.minutes ?? 0);
     }
 
     case "early": {
