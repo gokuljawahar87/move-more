@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { SEASON, activeSeason, SYNC_FLOOR } from "@/lib/season";
+import { DailyPoints, disciplineOf } from "@/lib/points";
 
 // Season dates now come from lib/season.ts, replacing the six
 // hardcoded copies of this constant.
@@ -104,10 +105,10 @@ export async function GET() {
     for (const profile of profiles) {
       if (!Array.isArray(profile.activities) || profile.activities.length === 0) continue;
 
-      let run = 0,
-        walk = 0,
-        cycle = 0,
-        points = 0;
+      // Points are capped at 175 per person per day; distance is not.
+      // The accumulator keeps a per-day tally so each day can be
+      // clamped before the days are summed.
+      const acc = new DailyPoints();
 
       for (const a of profile.activities) {
         if (!a?.is_valid || !a.start_date) continue;
@@ -116,20 +117,15 @@ export async function GET() {
         // A declared leave day lifts the office-hours exclusion.
         if (!a.on_leave_day && overlapsWorkingHours(startUTC, a.moving_time || 0)) continue;
 
-        const km = Number(a.distance || 0) / 1000;
-        const type = a.derived_type || a.type;
-
-        if (type === "Run" || type === "TrailRun") {
-          run += km;
-          points += km * 22; // 🏃 updated from 25 → 22
-        } else if (type === "Walk" || type === "Reclassified-Walk") {
-          walk += km;
-          points += km * 14;
-        } else if (type === "Ride" || type === "VirtualRide") {
-          cycle += km;
-          points += km * 6;
-        }
+        acc.add(
+          a.start_date,
+          disciplineOf(a.derived_type || a.type),
+          Number(a.distance || 0) / 1000
+        );
       }
+
+      const { run, walk, cycle } = acc.km;
+      const points = acc.points;
 
       const name = `${profile.first_name || ""} ${profile.last_name || ""}`.trim();
       const team = profile.team ?? null;

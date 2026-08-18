@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { SEASON, activeSeason, SYNC_FLOOR } from "@/lib/season";
+import { DailyPoints, disciplineOf } from "@/lib/points";
 
 // Challenge start (1 Oct 2025, 00:00 IST)
 // Season dates now come from lib/season.ts, replacing the six
@@ -117,10 +118,8 @@ export async function GET(request: Request) {
     for (const profile of data) {
       if (!profile.team) continue; // skip users without team
 
-      let run = 0,
-        walk = 0,
-        cycle = 0,
-        points = 0;
+      // Points capped at 175 per person per day; distance uncapped.
+      const acc = new DailyPoints();
 
       if (Array.isArray(profile.activities)) {
         for (const a of profile.activities) {
@@ -130,22 +129,16 @@ export async function GET(request: Request) {
           // A declared leave day lifts the office-hours exclusion.
           if (!a.on_leave_day && overlapsWorkingHours(startUTC, a.moving_time || 0)) continue;
 
-          const km = Number(a.distance || 0) / 1000;
-          const type = a.derived_type || a.type;
-
-          // 🧮 Points logic (UPDATED)
-          if (type === "Run" || type === "TrailRun") {
-            run += km;
-            points += km * 22; // 🏃 Run = 22 pts/km (updated from 25)
-          } else if (type === "Walk" || type === "Reclassified-Walk") {
-            walk += km;
-            points += km * 14; // 🚶 Walk = 14 pts/km
-          } else if (type === "Ride" || type === "VirtualRide") {
-            cycle += km;
-            points += km * 6; // 🚴 Cycle = 6 pts/km
-          }
+          acc.add(
+            a.start_date,
+            disciplineOf(a.derived_type || a.type),
+            Number(a.distance || 0) / 1000
+          );
         }
       }
+
+      const { run, walk, cycle } = acc.km;
+      const points = acc.points;
 
       const member = {
         name: `${profile.first_name || ""} ${profile.last_name || ""}`.trim(),

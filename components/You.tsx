@@ -12,6 +12,8 @@ import {
   Check,
   TrendingUp,
   Target,
+  Undo2,
+  Scale,
 } from "lucide-react";
 import { teamLogo, teamName } from "@/lib/teams";
 
@@ -30,6 +32,7 @@ export default function You() {
   const [leaveDays, setLeaveDays] = useState<string[]>([]);
   const [today, setToday] = useState<string>("");
   const [savingLeave, setSavingLeave] = useState(false);
+  const [weights, setWeights] = useState<{ date: string; weight: number }[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -38,15 +41,17 @@ export default function You() {
         setProfile(p);
 
         if (p?.user_id) {
-          const [s, lv, g] = await Promise.all([
+          const [s, lv, g, w] = await Promise.all([
             fetch(`/api/user/stats?user_id=${p.user_id}`).then((r) => r.json()),
             fetch("/api/leave").then((r) => r.json()),
             fetch("/api/challenges").then((r) => r.json()),
+            fetch("/api/weight/get").then((r) => r.json()),
           ]);
           setStats(s);
           setLeaveDays(lv.days ?? []);
           setToday(lv.today ?? "");
           setGoals(g);
+          setWeights(w.entries ?? []);
         }
       } catch (err) {
         console.error("Failed to load your page:", err);
@@ -266,6 +271,19 @@ export default function You() {
               <Row label="Points" value={Math.round(stats.totalPoints ?? 0)} />
               <Row label="Activities" value={stats.totalActivities ?? 0} />
               <Row label="Active days" value={stats.activeDays ?? 0} />
+
+              {/* Only shown once it has actually bitten — explaining a
+                  cap to someone who has never hit it is just noise. */}
+              {(stats.daysAtCap ?? 0) > 0 && (
+                <p className="split text-chalk-dim pt-2.5 border-t border-ink-800 leading-relaxed">
+                  You hit the {stats.dailyCap ?? 175}-point daily cap on{" "}
+                  <span className="text-tape">
+                    {stats.daysAtCap} {stats.daysAtCap === 1 ? "day" : "days"}
+                  </span>
+                  . Your kilometres still count in full — the cap only
+                  limits what one person adds to the team in a day.
+                </p>
+              )}
             </div>
 
           {/* ── Today's goals ──────────────────────────────────
@@ -404,11 +422,42 @@ export default function You() {
               </p>
 
               {leaveDays.includes(today) ? (
-                <div className="mt-3 flex items-center gap-2">
-                  <Check size={14} className="text-walk" strokeWidth={3} />
-                  <span className="font-display font-600 uppercase tracking-wide text-sm text-walk">
-                    Today marked as leave
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <Check size={14} className="text-walk" strokeWidth={3} />
+                    <span className="font-display font-600 uppercase tracking-wide text-sm text-walk truncate">
+                      Today marked as leave
+                    </span>
                   </span>
+
+                  {/* Undo — people mark it to see what it does, and
+                      without this they were stuck with it. */}
+                  <button
+                    disabled={savingLeave}
+                    onClick={async () => {
+                      setSavingLeave(true);
+                      try {
+                        const r = await fetch("/api/leave", {
+                          method: "DELETE",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ leave_date: today }),
+                        });
+                        if (r.ok) {
+                          setLeaveDays((d: string[]) =>
+                            d.filter((x) => x !== today)
+                          );
+                        }
+                      } finally {
+                        setSavingLeave(false);
+                      }
+                    }}
+                    className="flex items-center gap-1 text-chalk-dim hover:text-run
+                               font-display font-600 uppercase tracking-[0.1em]
+                               text-[10px] transition-colors shrink-0 disabled:opacity-50"
+                  >
+                    <Undo2 size={11} />
+                    Undo
+                  </button>
                 </div>
               ) : (
                 <button
@@ -448,6 +497,11 @@ export default function You() {
             </div>
 
             
+            {/* ── Weight trend ──────────────────────────────────
+                Last section on the page. Private to the person — it
+                appears on no leaderboard and in no team view. */}
+            <WeightTrend entries={weights} />
+
           {total === 0 && (
             <p className="split text-chalk-dim text-center mt-6">
               Nothing logged yet. Your first one counts double in spirit.
@@ -543,6 +597,173 @@ function Best({
       >
         {km ? `${km.toFixed(1)} km` : "—"}
       </span>
+    </div>
+  );
+}
+
+/**
+ * A plain line of the last 12 weigh-ins.
+ *
+ * Deliberately unopinionated: no target line, no BMI, no colour coding
+ * of "good" and "bad" directions. It shows the shape of the data and
+ * leaves the interpretation to the person it belongs to.
+ */
+function WeightTrend({ entries }: { entries: { date: string; weight: number }[] }) {
+  if (!entries.length) {
+    return (
+      <div className="bib px-4 pt-5 pb-4 mb-4">
+        <div className="flex items-center gap-1.5">
+          <Scale size={13} className="text-tape" strokeWidth={2.2} />
+          <p className="eyebrow text-[9px]">Weight</p>
+        </div>
+        <p className="split text-chalk-dim mt-2.5 leading-relaxed">
+          Nothing logged yet. Tap the scales in the top bar to add your
+          first entry — only you can see it.
+        </p>
+      </div>
+    );
+  }
+
+  const shown = entries.slice(-12);
+  const values = shown.map((e) => e.weight);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  // A flat line would divide by zero, so give it a little headroom
+  const span = max - min || 1;
+
+  const W = 300;
+  const H = 84;
+  const pad = 8;
+  // Headroom so the first point's label isn't clipped
+  const padTop = 16;
+  // Extra room on the right so the last value's label isn't clipped
+  const padRight = 38;
+
+  const points = shown.map((e, i) => {
+    const x =
+      shown.length === 1
+        ? W / 2
+        : pad + (i / (shown.length - 1)) * (W - pad - padRight);
+    const y = padTop + (1 - (e.weight - min) / span) * (H - padTop - pad);
+    return { x, y, ...e };
+  });
+
+  const path = points
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+    .join(" ");
+
+  const latest = values[values.length - 1];
+  const first = values[0];
+  const change = latest - first;
+
+  return (
+    <div className="bib px-4 pt-5 pb-4 mb-4">
+      <div className="flex items-center gap-1.5">
+        <Scale size={13} className="text-tape" strokeWidth={2.2} />
+        <p className="eyebrow text-[9px]">Weight</p>
+      </div>
+
+      <div className="flex items-end justify-between mt-2.5">
+        <div>
+          <div className="flex items-baseline gap-1">
+            <span className="readout text-[34px] leading-none text-tape">
+              {latest.toFixed(1)}
+            </span>
+            <span className="eyebrow text-[9px]">kg</span>
+          </div>
+          {/* Labelled, because sitting above the chart's left edge it
+              otherwise reads as the starting weight. */}
+          <p className="eyebrow text-[8px] mt-1.5">Latest</p>
+        </div>
+
+        {shown.length > 1 && (
+          <div className="text-right">
+            <span className="readout text-base text-chalk-dim">
+              {change > 0 ? "+" : ""}
+              {change.toFixed(1)} kg
+            </span>
+            <p className="eyebrow text-[8px] mt-1">
+              from {first.toFixed(1)} kg
+            </p>
+          </div>
+        )}
+      </div>
+
+      {shown.length > 1 && (
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="w-full h-[86px] mt-3"
+          preserveAspectRatio="none"
+          role="img"
+          aria-label="Your weight over time"
+        >
+          <path
+            d={path}
+            fill="none"
+            stroke="var(--tape)"
+            strokeWidth="2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+          {points.map((p, i) => (
+            <circle
+              key={i}
+              cx={p.x}
+              cy={p.y}
+              r={i === points.length - 1 ? 3 : 2}
+              fill={
+                i === points.length - 1 ? "var(--tape)" : "var(--ink-900)"
+              }
+              stroke="var(--tape)"
+              strokeWidth="1.5"
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+
+          {/* First and last readings, so the change is readable on the
+              chart itself. CSS variables don't resolve in SVG
+              presentation attributes, so the font goes via style. */}
+          <text
+            x={points[0].x}
+            y={points[0].y - 7}
+            fill="var(--chalk-dim)"
+            fontSize="10"
+            textAnchor="start"
+            style={{ fontFamily: "var(--font-mono), monospace" }}
+          >
+            {first.toFixed(1)}
+          </text>
+
+          <text
+            x={points[points.length - 1].x + 7}
+            y={points[points.length - 1].y + 3.5}
+            fill="var(--tape)"
+            fontSize="11"
+            fontWeight="700"
+            style={{ fontFamily: "var(--font-mono), monospace" }}
+          >
+            {latest.toFixed(1)}
+          </text>
+        </svg>
+      )}
+
+      <div className="flex justify-between mt-2 pt-2.5 border-t border-ink-800">
+        <span className="split text-chalk-dim">
+          {new Date(`${shown[0].date}T12:00:00+05:30`).toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "short",
+          })}
+        </span>
+        <span className="split text-chalk-dim">
+          {shown.length} {shown.length === 1 ? "entry" : "entries"}
+        </span>
+        <span className="split text-chalk-dim">
+          {new Date(
+            `${shown[shown.length - 1].date}T12:00:00+05:30`
+          ).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+        </span>
+      </div>
     </div>
   );
 }

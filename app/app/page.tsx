@@ -141,7 +141,9 @@ function AppContent() {
           Viewing as guest — read only
         </div>
 
-        <div className="flex-1 overflow-y-auto pb-32 px-2 sm:px-6">{tabs}</div>
+        <div className="flex-1 overflow-y-auto pb-32">
+          <div className="max-w-xl mx-auto w-full px-2 sm:px-4">{tabs}</div>
+        </div>
 
         <BottomNav
           activeTab={activeTab}
@@ -165,7 +167,11 @@ function AppContent() {
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
-      <div className="flex-1 overflow-y-auto pb-32">{tabs}</div>
+      {/* The layout is designed for a phone. Without a max width the
+            cards stretch across a desktop monitor and read as broken. */}
+        <div className="flex-1 overflow-y-auto pb-32">
+          <div className="max-w-xl mx-auto w-full">{tabs}</div>
+        </div>
       <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
     </div>
   );

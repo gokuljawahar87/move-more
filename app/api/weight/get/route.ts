@@ -1,41 +1,50 @@
 // app/api/weight/get/route.ts
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-export async function GET(req: Request) {
+export const dynamic = "force-dynamic";
+
+/**
+ * Returns the signed-in person's own weight log — nobody else's.
+ *
+ * The user_id deliberately comes from the cookie, not a query
+ * parameter. Weight is personal health data and is never shown on any
+ * leaderboard or team view.
+ */
+export async function GET() {
   try {
-    const url = new URL(req.url);
-    const user_id = url.searchParams.get("user_id");
+    const store = await cookies();
+    const user_id = store.get("user_id")?.value;
 
     if (!user_id) {
-      return NextResponse.json(
-        { error: "Missing user_id" },
-        { status: 400 }
-      );
+      return NextResponse.json({ entries: [] });
     }
 
-    // ✅ Fetch weight logs sorted by date ascending
     const { data, error } = await supabaseAdmin
       .from("weight_logs")
       .select("date, weight")
       .eq("user_id", user_id)
       .order("date", { ascending: true });
 
-    if (error) {
-      console.error("❌ Supabase fetch error (weight_logs):", error);
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
-    }
+    if (error) throw error;
 
-    // ✅ Always return array
-    return NextResponse.json(data ?? []);
+    const entries = (data ?? []).map((r: any) => ({
+      date: r.date,
+      weight: Number(r.weight),
+    }));
+
+    const first = entries[0]?.weight ?? null;
+    const latest = entries[entries.length - 1]?.weight ?? null;
+
+    return NextResponse.json({
+      entries,
+      first,
+      latest,
+      change: first != null && latest != null ? latest - first : null,
+    });
   } catch (err: any) {
-    console.error("❌ /api/weight/get unexpected error:", err);
-    return NextResponse.json(
-      { error: err?.message || "Server error while fetching weight logs" },
-      { status: 500 }
-    );
+    console.error("Weight get error:", err);
+    return NextResponse.json({ error: err.message, entries: [] }, { status: 500 });
   }
 }

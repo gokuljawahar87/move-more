@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { SEASON, activeSeason, SYNC_FLOOR } from "@/lib/season";
 import { computeStreaks, istDayKey } from "@/lib/streak";
+import { DailyPoints, disciplineOf, DAILY_POINT_CAP } from "@/lib/points";
 import { mondayOf, addDays } from "@/lib/challenges";
 
 // -------------------------------
@@ -107,6 +108,9 @@ export async function GET(req: Request) {
         totalParticipants: 0,
         thisWeekKm: 0,
         lastWeekKm: 0,
+        cappedAway: 0,
+        daysAtCap: 0,
+        dailyCap: DAILY_POINT_CAP,
         currentStreak: 0,
         maxStreak: 0,
         todayDone: false,
@@ -124,13 +128,13 @@ export async function GET(req: Request) {
       points: number;
     }[] = [];
 
+    let myCapInfo = { cappedAway: 0, daysAtCap: 0, dailyCap: DAILY_POINT_CAP };
+
     for (const profile of profiles) {
       if (!Array.isArray(profile.activities)) continue;
 
-      let run = 0,
-        walk = 0,
-        cycle = 0,
-        points = 0;
+      // Points capped at 175 per person per day; distance uncapped.
+      const acc = new DailyPoints();
 
       for (const a of profile.activities) {
         if (!a?.is_valid || !a.start_date) continue;
@@ -138,19 +142,24 @@ export async function GET(req: Request) {
         // A declared leave day lifts the office-hours exclusion.
         if (!a.on_leave_day && overlapsWorkingHours(startUTC, a.moving_time || 0)) continue;
 
-        const km = Number(a.distance || 0) / 1000;
-        const type = a.derived_type || a.type;
+        acc.add(
+          a.start_date,
+          disciplineOf(a.derived_type || a.type),
+          Number(a.distance || 0) / 1000
+        );
+      }
 
-        if (type === "Run" || type === "TrailRun") {
-          run += km;
-          points += km * 22;
-        } else if (type === "Walk" || type === "Reclassified-Walk") {
-          walk += km;
-          points += km * 14;
-        } else if (type === "Ride" || type === "VirtualRide") {
-          cycle += km;
-          points += km * 6;
-        }
+      const { run, walk, cycle } = acc.km;
+      const points = acc.points;
+
+      // For the signed-in user, keep what the cap trimmed so the app
+      // can show it rather than silently losing their points.
+      if (profile.user_id === user_id) {
+        myCapInfo = {
+          cappedAway: acc.cappedAway,
+          daysAtCap: acc.daysAtCap,
+          dailyCap: DAILY_POINT_CAP,
+        };
       }
 
       allUsers.push({
@@ -269,6 +278,7 @@ export async function GET(req: Request) {
       totalParticipants,
       thisWeekKm,
       lastWeekKm,
+      ...myCapInfo,
       currentStreak: streaks.currentStreak,
       maxStreak: streaks.maxStreak,
       todayDone: streaks.todayDone,

@@ -2,12 +2,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Link2, X } from "lucide-react";
+import { Link2, X, Scale } from "lucide-react";
 import { SEASON, getSeasonStatus, type SeasonStatus } from "@/lib/season";
+import WeightLogger from "./WeightLogger";
 
 export function Header({ isGuest = false }: { isGuest?: boolean }) {
   const [initials, setInitials] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [weightOpen, setWeightOpen] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [status, setStatus] = useState<SeasonStatus | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -100,6 +102,19 @@ export function Header({ isGuest = false }: { isGuest?: boolean }) {
           </div>
 
           {!isGuest && (
+            <div className="flex items-center gap-2.5 shrink-0">
+            {/* Sized to match the profile avatar so the two read as a
+                pair rather than an icon crowding a button. */}
+            <button
+              onClick={() => setWeightOpen(true)}
+              aria-label="Log your weight"
+              className="w-9 h-9 flex items-center justify-center rounded-full
+                         border border-ink-700 text-chalk-dim
+                         hover:text-tape hover:border-tape transition-colors shrink-0"
+            >
+              <Scale size={17} strokeWidth={2} />
+            </button>
+
             <div className="relative shrink-0" ref={menuRef}>
               <button
                 onClick={() => setMenuOpen((v: boolean) => !v)}
@@ -146,6 +161,7 @@ export function Header({ isGuest = false }: { isGuest?: boolean }) {
                   )}
                 </div>
               )}
+            </div>
             </div>
           )}
         </div>
@@ -206,6 +222,8 @@ export function Header({ isGuest = false }: { isGuest?: boolean }) {
           </div>
         )}
       </header>
+
+      <WeightLogger open={weightOpen} onClose={() => setWeightOpen(false)} />
     </>
   );
 }
