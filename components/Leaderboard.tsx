@@ -198,7 +198,7 @@ function Section({
   );
 }
 
-/** Share of each team that has logged something. */
+/** How many people from each team have logged something. */
 function Participation({ list }: { list: LeaderboardEntry[] }) {
   return (
     <section>
@@ -206,7 +206,7 @@ function Participation({ list }: { list: LeaderboardEntry[] }) {
         <h2 className="font-display font-700 uppercase tracking-[0.08em] text-xl">
           Turnout
         </h2>
-        <span className="split text-chalk-dim">share of team active</span>
+        <span className="split text-chalk-dim">members moving</span>
       </div>
 
       {list.length > 0 ? (
@@ -214,7 +214,9 @@ function Participation({ list }: { list: LeaderboardEntry[] }) {
           {list.map((t, i) => {
             const rank = i + 1;
             const logo = teamLogo(t.team);
-            const pct = Math.round((t.rate ?? 0) * 100);
+            const active = t.active ?? 0;
+            const size = t.size ?? 0;
+            const pct = size > 0 ? Math.round((active / size) * 100) : 0;
 
             return (
               <div
@@ -250,16 +252,21 @@ function Participation({ list }: { list: LeaderboardEntry[] }) {
                       {teamName(t.team)}
                     </div>
                     <div className="split text-chalk-dim mt-0.5">
-                      {t.active} of {t.size} moving
+                      of {t.size} registered · {pct}%
                     </div>
                   </div>
 
                   <div className="text-right shrink-0">
-                    <span className="readout text-2xl text-walk">{pct}</span>
-                    <span className="eyebrow text-[9px] ml-0.5">%</span>
+                    <span className="readout text-2xl text-walk">{active}</span>
+                    <span className="eyebrow text-[9px] ml-1">
+                      {active === 1 ? "member" : "members"}
+                    </span>
                   </div>
                 </div>
 
+                {/* The bar shows the SHARE of the team that's moving.
+                    Ranking is still by headcount — scaling the bar to the
+                    leader instead made 4-of-5 and 4-of-8 both look full. */}
                 <div className="mt-2.5 h-1.5 w-full rounded-full overflow-hidden bg-ink-800">
                   <div
                     className="h-full bg-walk transition-all duration-700"

@@ -202,13 +202,16 @@ export async function GET() {
       teamActive[u.team] = (teamActive[u.team] ?? 0) + 1;
     }
 
+    // Ranked by headcount, not share. A percentage moves as people
+    // register, so a team could slide down the board without anyone
+    // doing anything differently.
     const participation = Object.entries(teamRoster)
       .map(([team, size]) => {
         const active = teamActive[team] ?? 0;
-        return { team, active, size, rate: size > 0 ? active / size : 0 };
+        return { team, active, size };
       })
       .filter((t) => t.size > 0)
-      .sort((a, b) => b.rate - a.rate || b.active - a.active)
+      .sort((a, b) => b.active - a.active || a.size - b.size)
       .slice(0, 3);
 
     return NextResponse.json({
