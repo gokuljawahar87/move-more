@@ -97,10 +97,10 @@ export const CHALLENGES: Challenge[] = [
   { id: "pace-9-1", title: "Quick Feet I", blurb: "1 km on foot at 9:00/km or better", family: "pace", icon: "zap", difficulty: "easy", points: 10, paceMin: 9, km: 1 },
   { id: "pace-9-2", title: "Quick Feet II", blurb: "2 km on foot at 9:00/km or better", family: "pace", icon: "zap", difficulty: "easy", points: 10, paceMin: 9, km: 2 },
   { id: "pace-9-3", title: "Quick Feet III", blurb: "3 km on foot at 9:00/km or better", family: "pace", icon: "zap", difficulty: "easy", points: 10, paceMin: 9, km: 3 },
-  { id: "pts-100", title: "Century", blurb: "Earn 100 points today", family: "points", icon: "target", difficulty: "medium", points: 20, target: 100 },
-  { id: "pts-150", title: "One Fifty", blurb: "Earn 150 points today", family: "points", icon: "target", difficulty: "hard", points: 30, target: 150 },
-  { id: "pts-50", title: "Fifty Up", blurb: "Earn 50 points today", family: "points", icon: "target", difficulty: "easy", points: 10, target: 50 },
-  { id: "pts-75", title: "Seventy-Five", blurb: "Earn 75 points today", family: "points", icon: "target", difficulty: "easy", points: 10, target: 75 },
+  { id: "pts-75", title: "Seventy-Five", blurb: "Earn 75 points today", family: "points", icon: "target", difficulty: "medium", points: 20, target: 75 },
+  { id: "pts-100", title: "Century", blurb: "Earn 100 points today", family: "points", icon: "target", difficulty: "hard", points: 30, target: 100 },
+  { id: "pts-40", title: "Forty Up", blurb: "Earn 40 points today", family: "points", icon: "target", difficulty: "easy", points: 10, target: 40 },
+  { id: "pts-60", title: "Sixty Up", blurb: "Earn 60 points today", family: "points", icon: "target", difficulty: "easy", points: 10, target: 60 },
   { id: "two-15", title: "Two a Day", blurb: "Two separate activities, each 15 minutes or more", family: "two-a-day", icon: "layers", difficulty: "medium", points: 20, minutes: 15 },
   { id: "two-20", title: "Two a Day+", blurb: "Two separate activities, each 20 minutes or more", family: "two-a-day", icon: "layers", difficulty: "medium", points: 20, minutes: 20 },
   { id: "two-30", title: "Double Session", blurb: "Two separate activities, each 30 minutes or more", family: "two-a-day", icon: "layers", difficulty: "hard", points: 30, minutes: 30 },];
@@ -115,58 +115,58 @@ export const BY_ID: Record<string, Challenge> = Object.fromEntries(
 
 export const SCHEDULE: Record<string, string[]> = {
   "2026-09-01": ["pace-9-1", "two-15"], // Tue
-  "2026-09-02": ["pts-50", "dur-30"], // Wed
+  "2026-09-02": ["pts-40", "dur-30"], // Wed
   "2026-09-03": ["dur-35", "pace-9-1"], // Thu
-  "2026-09-04": ["mix-15", "pts-75"], // Fri
+  "2026-09-04": ["mix-15", "pts-60"], // Fri
   "2026-09-05": ["day-5", "dur-40", "early-6"], // Sat
   "2026-09-06": ["one-5", "early-530", "beat-avg"], // Sun
-  "2026-09-07": ["pts-50", "early-530"], // Mon
+  "2026-09-07": ["pts-40", "early-530"], // Mon
   "2026-09-08": ["pace-9-2", "two-15"], // Tue
-  "2026-09-09": ["pts-75", "dur-30"], // Wed
+  "2026-09-09": ["pts-60", "dur-30"], // Wed
   "2026-09-10": ["dur-35", "pace-9-2"], // Thu
-  "2026-09-11": ["mix-15", "pts-100"], // Fri
+  "2026-09-11": ["mix-15", "pts-75"], // Fri
   "2026-09-12": ["day-5", "dur-40", "early-6"], // Sat
   "2026-09-13": ["one-5", "early-530", "beat-avg"], // Sun
-  "2026-09-14": ["pts-75", "early-530"], // Mon
+  "2026-09-14": ["pts-60", "early-530"], // Mon
   "2026-09-15": ["pace-9-3", "two-15"], // Tue
-  "2026-09-16": ["pts-100", "dur-35"], // Wed
+  "2026-09-16": ["pts-75", "dur-35"], // Wed
   "2026-09-17": ["dur-40", "pace-9-3"], // Thu
-  "2026-09-18": ["mix-15", "pts-150"], // Fri
+  "2026-09-18": ["mix-15", "pts-100"], // Fri
   "2026-09-19": ["day-6", "dur-45", "early-6"], // Sat
   "2026-09-20": ["one-6", "early-530", "beat-avg"], // Sun
-  "2026-09-21": ["pts-100", "early-530"], // Mon
+  "2026-09-21": ["pts-75", "early-530"], // Mon
   "2026-09-22": ["pace-8-1", "two-20"], // Tue
-  "2026-09-23": ["pts-100", "dur-35"], // Wed
+  "2026-09-23": ["pts-75", "dur-35"], // Wed
   "2026-09-24": ["dur-40", "pace-8-1"], // Thu
-  "2026-09-25": ["mix-15", "pts-150"], // Fri
+  "2026-09-25": ["mix-15", "pts-100"], // Fri
   "2026-09-26": ["day-6", "dur-45", "early-6"], // Sat
   "2026-09-27": ["one-6", "early-530", "beat-avg"], // Sun
-  "2026-09-28": ["pts-100", "early-530"], // Mon
+  "2026-09-28": ["pts-75", "early-530"], // Mon
   "2026-09-29": ["pace-8-2", "two-20"], // Tue
-  "2026-09-30": ["pts-150", "dur-40"], // Wed
+  "2026-09-30": ["pts-100", "dur-40"], // Wed
   "2026-10-01": ["dur-45", "pace-8-2"], // Thu
-  "2026-10-02": ["mix-20", "pts-150"], // Fri
+  "2026-10-02": ["mix-20", "pts-100"], // Fri
   "2026-10-03": ["day-7", "dur-50", "early-6"], // Sat
   "2026-10-04": ["one-7", "early-530", "beat-avg"], // Sun
-  "2026-10-05": ["pts-150", "early-530"], // Mon
+  "2026-10-05": ["pts-100", "early-530"], // Mon
   "2026-10-06": ["pace-8-3", "two-20"], // Tue
-  "2026-10-07": ["pts-150", "dur-45"], // Wed
+  "2026-10-07": ["pts-100", "dur-45"], // Wed
   "2026-10-08": ["dur-50", "pace-8-3"], // Thu
-  "2026-10-09": ["mix-20", "pts-150"], // Fri
+  "2026-10-09": ["mix-20", "pts-100"], // Fri
   "2026-10-10": ["day-8", "dur-55", "early-6"], // Sat
   "2026-10-11": ["one-8", "early-530", "beat-avg"], // Sun
-  "2026-10-12": ["pts-150", "early-530"], // Mon
+  "2026-10-12": ["pts-100", "early-530"], // Mon
   "2026-10-13": ["pace-7-1", "two-30"], // Tue
-  "2026-10-14": ["pts-150", "dur-50"], // Wed
+  "2026-10-14": ["pts-100", "dur-50"], // Wed
   "2026-10-15": ["dur-55", "pace-7-1"], // Thu
-  "2026-10-16": ["mix-20", "pts-150"], // Fri
+  "2026-10-16": ["mix-20", "pts-100"], // Fri
   "2026-10-17": ["day-9", "dur-60", "early-6"], // Sat
   "2026-10-18": ["one-9", "early-530", "beat-avg"], // Sun
-  "2026-10-19": ["pts-150", "early-530"], // Mon
+  "2026-10-19": ["pts-100", "early-530"], // Mon
   "2026-10-20": ["pace-7-2", "two-30"], // Tue
-  "2026-10-21": ["pts-150", "dur-50"], // Wed
+  "2026-10-21": ["pts-100", "dur-50"], // Wed
   "2026-10-22": ["dur-55", "pace-7-3"], // Thu
-  "2026-10-23": ["mix-20", "pts-150"], // Fri
+  "2026-10-23": ["mix-20", "pts-100"], // Fri
   "2026-10-24": ["day-10", "dur-60", "early-6"], // Sat
   "2026-10-25": ["one-10", "early-530", "beat-avg"], // Sun
 };

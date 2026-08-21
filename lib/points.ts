@@ -11,7 +11,7 @@
 // the run, walk and cycle leaderboards — go as far as you like, it just
 // stops adding to the team total past the cap.
 
-export const DAILY_POINT_CAP = 175;
+export const DAILY_POINT_CAP = 100;
 
 /** Points per kilometre, by discipline. */
 export const RATE = {

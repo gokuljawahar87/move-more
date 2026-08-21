@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { SEASON, activeSeason, SYNC_FLOOR } from "@/lib/season";
 import { DailyPoints, disciplineOf } from "@/lib/points";
+import { computeStreaks } from "@/lib/streak";
 
 // Season dates now come from lib/season.ts, replacing the six
 // hardcoded copies of this constant.
@@ -89,34 +90,53 @@ export async function GET() {
 
     if (!profiles.length) {
       return NextResponse.json({
-        runners: [],
-        walkers: [],
-        cyclers: [],
-        teams: [],
         topFemales: [],
+        topMales: [],
+        topStreaks: [],
+        teams: [],
+        participation: [],
       });
     }
 
-    const userTotals: Record<
-      string,
-      { name: string; team: string | null; gender?: string; run: number; walk: number; cycle: number; points: number }
-    > = {};
+    type UserRow = {
+      user_id: string;
+      name: string;
+      team: string | null;
+      gender: string;
+      run: number;
+      walk: number;
+      cycle: number;
+      points: number;
+      streak: number;
+      active: boolean;
+    };
+
+    const userTotals: Record<string, UserRow> = {};
+
+    // Registered members per team, including those with nothing logged —
+    // needed for the participation rate below.
+    const teamRoster: Record<string, number> = {};
 
     for (const profile of profiles) {
-      if (!Array.isArray(profile.activities) || profile.activities.length === 0) continue;
+      const team = profile.team ?? null;
+      if (team) teamRoster[team] = (teamRoster[team] ?? 0) + 1;
 
-      // Points are capped at 175 per person per day; distance is not.
-      // The accumulator keeps a per-day tally so each day can be
-      // clamped before the days are summed.
+      const acts = Array.isArray(profile.activities) ? profile.activities : [];
+
+      // Points are capped per person per day; distance is not. The
+      // accumulator keeps a per-day tally so each day is clamped before
+      // the days are summed.
       const acc = new DailyPoints();
+      const counted: any[] = [];
 
-      for (const a of profile.activities) {
+      for (const a of acts) {
         if (!a?.is_valid || !a.start_date) continue;
 
         const startUTC = new Date(a.start_date);
         // A declared leave day lifts the office-hours exclusion.
         if (!a.on_leave_day && overlapsWorkingHours(startUTC, a.moving_time || 0)) continue;
 
+        counted.push(a);
         acc.add(
           a.start_date,
           disciplineOf(a.derived_type || a.type),
@@ -127,34 +147,77 @@ export async function GET() {
       const { run, walk, cycle } = acc.km;
       const points = acc.points;
 
-      const name = `${profile.first_name || ""} ${profile.last_name || ""}`.trim();
-      const team = profile.team ?? null;
-      const gender = genderDict[profile.user_id] ?? "NA";
-
-      userTotals[profile.user_id] = { name, team, gender, run, walk, cycle, points };
+      userTotals[profile.user_id] = {
+        user_id: profile.user_id,
+        name: `${profile.first_name || ""} ${profile.last_name || ""}`.trim(),
+        team,
+        gender: genderDict[profile.user_id] ?? "NA",
+        run,
+        walk,
+        cycle,
+        points,
+        streak: computeStreaks(counted).currentStreak,
+        // "Active" means they've logged at least one qualifying activity
+        active: counted.length > 0,
+      };
     }
 
     const users = Object.values(userTotals);
+    const scored = users.filter((u) => u.points > 0);
 
-    const runners = users.filter((u) => u.run > 0).sort((a, b) => b.run - a.run).slice(0, 3);
-    const walkers = users.filter((u) => u.walk > 0).sort((a, b) => b.walk - a.walk).slice(0, 3);
-    const cyclers = users.filter((u) => u.cycle > 0).sort((a, b) => b.cycle - a.cycle).slice(0, 3);
+    const byPoints = (a: UserRow, b: UserRow) => b.points - a.points;
 
-    const topFemales = users
-      .filter((u) => u.gender === "FEMALE" && u.points > 0)
-      .sort((a, b) => b.points - a.points)
+    // ── Podiums by gender ────────────────────────────────────────
+    const topFemales = scored
+      .filter((u) => u.gender.startsWith("F"))
+      .sort(byPoints)
+      .slice(0, 3);
+    const topMales = scored
+      .filter((u) => !u.gender.startsWith("F"))
+      .sort(byPoints)
       .slice(0, 3);
 
+    // ── Longest current streaks ──────────────────────────────────
+    const topStreaks = users
+      .filter((u) => u.streak > 0)
+      .sort((a, b) => b.streak - a.streak || b.points - a.points)
+      .slice(0, 3);
+
+    // ── Team points ──────────────────────────────────────────────
     const teamTotals: Record<string, { team: string; points: number }> = {};
     for (const u of users) {
       if (!u.team) continue;
       if (!teamTotals[u.team]) teamTotals[u.team] = { team: u.team, points: 0 };
       teamTotals[u.team].points += u.points;
     }
-
     const teams = Object.values(teamTotals).sort((a, b) => b.points - a.points).slice(0, 3);
 
-    return NextResponse.json({ runners, walkers, cyclers, teams, topFemales });
+    // ── Participation ────────────────────────────────────────────
+    // As a SHARE of each team, not a headcount. Teams range from 11 to
+    // 14 people, so counting active members outright would just rank
+    // the biggest teams highest.
+    const teamActive: Record<string, number> = {};
+    for (const u of users) {
+      if (!u.team || !u.active) continue;
+      teamActive[u.team] = (teamActive[u.team] ?? 0) + 1;
+    }
+
+    const participation = Object.entries(teamRoster)
+      .map(([team, size]) => {
+        const active = teamActive[team] ?? 0;
+        return { team, active, size, rate: size > 0 ? active / size : 0 };
+      })
+      .filter((t) => t.size > 0)
+      .sort((a, b) => b.rate - a.rate || b.active - a.active)
+      .slice(0, 3);
+
+    return NextResponse.json({
+      topFemales,
+      topMales,
+      topStreaks,
+      teams,
+      participation,
+    });
   } catch (err: any) {
     console.error("❌ Unexpected error in /leaderboard:", err);
     return NextResponse.json(

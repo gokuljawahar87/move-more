@@ -7,18 +7,20 @@ import { teamLogo, teamName } from "@/lib/teams";
 type LeaderboardEntry = {
   name?: string;
   team?: string;
-  run?: number;
-  walk?: number;
-  cycle?: number;
   points?: number;
+  streak?: number;
+  active?: number;
+  size?: number;
+  rate?: number;
 };
 
 type LeaderboardData = {
-  runners: LeaderboardEntry[];
-  walkers: LeaderboardEntry[];
-  cyclers: LeaderboardEntry[];
-  teams: LeaderboardEntry[];
+  topScorers?: LeaderboardEntry[];
   topFemales?: LeaderboardEntry[];
+  topMales?: LeaderboardEntry[];
+  topStreaks?: LeaderboardEntry[];
+  teams?: LeaderboardEntry[];
+  participation?: LeaderboardEntry[];
 };
 
 export default function Leaderboard() {
@@ -56,28 +58,13 @@ export default function Leaderboard() {
   return (
     <div className="px-4 py-5 space-y-8">
       <Section
-        label="Runners"
-        note="by distance"
-        list={data.runners}
-        metric="run"
-        unit="km"
-        accent="var(--run)"
-      />
-      <Section
-        label="Walkers"
-        note="by distance"
-        list={data.walkers}
-        metric="walk"
-        unit="km"
-        accent="var(--walk)"
-      />
-      <Section
-        label="Cyclists"
-        note="by distance"
-        list={data.cyclers}
-        metric="cycle"
-        unit="km"
-        accent="var(--cycle)"
+        label="Top Teams"
+        note="by points"
+        list={data.teams || []}
+        metric="points"
+        unit="pts"
+        accent="var(--tape)"
+        isTeam
       />
       <Section
         label="Women's Podium"
@@ -88,14 +75,27 @@ export default function Leaderboard() {
         accent="var(--tape)"
       />
       <Section
-        label="Teams"
+        label="Men's Podium"
         note="by points"
-        list={data.teams}
+        list={data.topMales || []}
         metric="points"
         unit="pts"
         accent="var(--tape)"
-        isTeam
       />
+      <Section
+        label="Longest Streaks"
+        note="consecutive days"
+        list={data.topStreaks || []}
+        metric="streak"
+        unit="days"
+        accent="var(--run)"
+      />
+
+      {/* Participation is a SHARE of each team, not a headcount —
+          teams differ in size, so counting active members outright
+          would just rank the biggest teams highest. */}
+      <Participation list={data.participation || []} />
+
     </div>
   );
 }
@@ -112,7 +112,7 @@ function Section({
   label: string;
   note: string;
   list: LeaderboardEntry[];
-  metric: "run" | "walk" | "cycle" | "points";
+  metric: "points" | "streak";
   unit: string;
   accent: string;
   isTeam?: boolean;
@@ -177,7 +177,9 @@ function Section({
                     className="readout text-2xl"
                     style={{ color: accent }}
                   >
-                    {Number(item[metric] ?? 0).toFixed(1)}
+                    {metric === "streak"
+                      ? Number(item[metric] ?? 0)
+                      : Number(item[metric] ?? 0).toFixed(1)}
                   </span>
                   <span className="eyebrow text-[9px] ml-1">{unit}</span>
                 </div>
@@ -190,6 +192,87 @@ function Section({
           <p className="split text-chalk-dim">
             Nobody on the board yet — first one here takes it.
           </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Share of each team that has logged something. */
+function Participation({ list }: { list: LeaderboardEntry[] }) {
+  return (
+    <section>
+      <div className="flex items-baseline justify-between mb-2.5 pb-2 border-b border-ink-800">
+        <h2 className="font-display font-700 uppercase tracking-[0.08em] text-xl">
+          Turnout
+        </h2>
+        <span className="split text-chalk-dim">share of team active</span>
+      </div>
+
+      {list.length > 0 ? (
+        <div className="space-y-2">
+          {list.map((t, i) => {
+            const rank = i + 1;
+            const logo = teamLogo(t.team);
+            const pct = Math.round((t.rate ?? 0) * 100);
+
+            return (
+              <div
+                key={t.team ?? i}
+                className={`bib bib-${rank} px-3.5 pt-4 pb-3 animate-bib-in`}
+                style={{ animationDelay: `${i * 60}ms` }}
+              >
+                <div className="flex items-center gap-3.5">
+                  <div
+                    className="bib-number w-9 shrink-0 text-center"
+                    style={{
+                      color:
+                        rank === 1
+                          ? "var(--gold)"
+                          : rank === 2
+                          ? "var(--silver)"
+                          : "var(--bronze)",
+                    }}
+                  >
+                    {rank}
+                  </div>
+
+                  {logo && (
+                    <img
+                      src={logo}
+                      alt=""
+                      className="w-8 h-8 rounded-full object-cover ring-1 ring-ink-700 shrink-0"
+                    />
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="font-display font-600 uppercase tracking-wide text-[17px] leading-tight truncate">
+                      {teamName(t.team)}
+                    </div>
+                    <div className="split text-chalk-dim mt-0.5">
+                      {t.active} of {t.size} moving
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <span className="readout text-2xl text-walk">{pct}</span>
+                    <span className="eyebrow text-[9px] ml-0.5">%</span>
+                  </div>
+                </div>
+
+                <div className="mt-2.5 h-1.5 w-full rounded-full overflow-hidden bg-ink-800">
+                  <div
+                    className="h-full bg-walk transition-all duration-700"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="bib px-4 pt-5 pb-4 text-center">
+          <p className="split text-chalk-dim">Nobody moving yet.</p>
         </div>
       )}
     </section>
