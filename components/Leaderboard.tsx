@@ -204,7 +204,7 @@ function Participation({ list }: { list: LeaderboardEntry[] }) {
     <section>
       <div className="flex items-baseline justify-between mb-2.5 pb-2 border-b border-ink-800">
         <h2 className="font-display font-700 uppercase tracking-[0.08em] text-xl">
-          Turnout
+          Top Active Team
         </h2>
         <span className="split text-chalk-dim">members moving</span>
       </div>
