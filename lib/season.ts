@@ -25,7 +25,7 @@ export const SEASON = {
   // Trial period — the app is open, but nothing here is ever scored.
   // Its purpose is to collect real fraud examples so the detection
   // thresholds can be tuned before Season 2 starts.
-  trialStart: new Date("2026-08-01T00:00:00+05:30"),
+  trialStart: new Date("2026-08-15T00:00:00+05:30"),
 
   // The Champions tab stays hidden until the season ends. Flip this to
   // true if you want to preview that tab before then.
@@ -137,4 +137,17 @@ function formatGap(ms: number): string {
   if (hours > 0)
     return `${hours}h ${String(minutes).padStart(2, "0")}m`;
   return `${minutes}m`;
+}
+
+/**
+ * The earliest activity date the app should ever display.
+ *
+ * Belt-and-braces alongside the `season` column. That column has a
+ * DEFAULT of 2, so any row written by a route that doesn't set it
+ * explicitly — the older Strava callback and token routes do this —
+ * lands in the current season no matter when it happened. Filtering on
+ * the date as well means a mistagged row still can't show up.
+ */
+export function displayWindowStart(now: Date = new Date()): Date {
+  return now.getTime() >= SEASON.start.getTime() ? SEASON.start : SEASON.trialStart;
 }

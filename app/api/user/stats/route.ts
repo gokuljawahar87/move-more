@@ -1,7 +1,7 @@
 // app/api/user/stats/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { SEASON, activeSeason, SYNC_FLOOR } from "@/lib/season";
+import { SEASON, activeSeason, SYNC_FLOOR, displayWindowStart } from "@/lib/season";
 import { computeStreaks, istDayKey } from "@/lib/streak";
 import { DailyPoints, disciplineOf, DAILY_POINT_CAP } from "@/lib/points";
 import { mondayOf, addDays } from "@/lib/challenges";
@@ -77,6 +77,10 @@ export async function GET(req: Request) {
       // Only the season currently on display: trial data before Sep 1,
       // Season 2 after. Season 1 is never shown.
       .eq("activities.season", activeSeason())
+      // Date floor as well as the season tag: the season column has a
+      // DEFAULT of 2, so a row written without it set explicitly would
+      // otherwise surface regardless of when it happened.
+      .gte("activities.start_date", displayWindowStart().toISOString())
       // Only members registered for this season — without this the
       // participant count still included last season's 95 people.
       .eq("season", SEASON.number);
