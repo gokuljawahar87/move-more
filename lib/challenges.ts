@@ -181,7 +181,7 @@ export const SCHEDULE: Record<string, string[]> = {
 // the season opens. Nothing outside this file is affected.
 // ═══════════════════════════════════════════════════════════════
 
-export const TEST_MODE = true;
+export const TEST_MODE = false;
 
 const TEST_ANCHOR = "2026-08-17"; // a Monday, so test weeks align
 

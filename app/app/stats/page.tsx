@@ -8,6 +8,7 @@ import { SEASON, getSeasonStatus } from "@/lib/season";
 
 export default function StatsPage() {
   const [loading, setLoading] = useState(true);
+  const [lastSync, setLastSync] = useState<string | null>(null);
   const [globalTotals, setGlobalTotals] = useState({
     total_distance: 0,
     cycling_distance: 0,
@@ -19,6 +20,11 @@ export default function StatsPage() {
   useEffect(() => {
     (async () => {
       try {
+        fetch("/api/sync-status")
+          .then((r) => r.json())
+          .then((d) => setLastSync(d.lastRefreshedAt ?? null))
+          .catch(() => {});
+
         const perfRes = await fetch("/api/team-performance");
         const perfJson = await perfRes.json();
         const teams = Array.isArray(perfJson) ? perfJson : perfJson?.teams ?? [];
@@ -106,6 +112,15 @@ export default function StatsPage() {
         walking_distance={globalTotals.walking_distance}
       />
 
+      {/* When the data was last pulled from Strava. Worth showing:
+          people wonder why an activity hasn't appeared yet, and this
+          answers it without them having to ask. */}
+      <p className="split text-chalk-dim text-center pt-2">
+        {lastSync
+          ? `Last synced ${formatSince(lastSync)}`
+          : "Sync time unavailable"}
+      </p>
+
       {movers === 0 && (
         <p className="split text-chalk-dim text-center pt-2">
           Nothing logged yet. Be the first on the board.
@@ -113,4 +128,20 @@ export default function StatsPage() {
       )}
     </main>
   );
+}
+
+/** "12 minutes ago", "3 hours ago", "2 days ago". */
+function formatSince(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "recently";
+
+  const mins = Math.floor((Date.now() - then) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} ${mins === 1 ? "minute" : "minutes"} ago`;
+
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+
+  const days = Math.floor(hours / 24);
+  return `${days} ${days === 1 ? "day" : "days"} ago`;
 }

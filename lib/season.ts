@@ -25,7 +25,7 @@ export const SEASON = {
   // Trial period — the app is open, but nothing here is ever scored.
   // Its purpose is to collect real fraud examples so the detection
   // thresholds can be tuned before Season 2 starts.
-  trialStart: new Date("2026-08-15T00:00:00+05:30"),
+  trialStart: new Date("2026-08-01T00:00:00+05:30"),
 
   // The Champions tab stays hidden until the season ends. Flip this to
   // true if you want to preview that tab before then.
