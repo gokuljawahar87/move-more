@@ -103,6 +103,8 @@ export default function Challenges() {
   }
 
   const board = data.leaderboard ?? [];
+  const pacesetters = data.pacesetters ?? [];
+  const anyScores = board.length > 0 || pacesetters.length > 0;
 
   return (
     <div className="px-4 py-5 space-y-5">
@@ -206,6 +208,20 @@ export default function Challenges() {
             )}
           </div>
 
+        </div>
+      ) : (
+        <div className="bib px-4 pt-5 pb-4 text-center">
+          <p className="split text-chalk-dim">
+            Nobody has scored on the Open board yet. First one takes the lead.
+          </p>
+        </div>
+      )}
+
+      {/* The expander sits OUTSIDE the podium branch. It used to be
+          inside it, so when the Open board was empty the Pacesetters
+          column had no way to be reached. */}
+      {anyScores && (
+        <>
           <button
             onClick={() => setShowBoard((v: boolean) => !v)}
             className="w-full flex items-center justify-center gap-1.5 py-2 font-display uppercase tracking-[0.12em] text-[11px] text-chalk-dim hover:text-chalk transition-colors"
@@ -218,23 +234,20 @@ export default function Challenges() {
           </button>
 
           {showBoard && (
-            <div className="bib divide-y divide-ink-800">
-              {board.map((p: any, i: number) => (
-                <div key={p.user_id} className="flex items-center gap-3 px-4 py-2.5">
-                  <span className="split text-chalk-dim w-5 shrink-0">{i + 1}</span>
-                  <span className="text-sm flex-1 truncate">{p.name}</span>
-                  <span className="readout text-sm shrink-0">{p.points}</span>
-                </div>
-              ))}
+            <div className="grid grid-cols-2 gap-2">
+              {/* Two columns. Regular runners play the same challenges
+                  and see the same progress, but are ranked among
+                  themselves — the weekly champion slots belong to the
+                  Open board. */}
+              <BoardColumn title="Open" list={board} />
+              <BoardColumn
+                title="Pacesetters"
+                list={data.pacesetters ?? []}
+                muted
+              />
             </div>
           )}
-        </div>
-      ) : (
-        <div className="bib px-4 pt-5 pb-4 text-center">
-          <p className="split text-chalk-dim">
-            Nobody has scored this week yet. First one takes the lead.
-          </p>
-        </div>
+        </>
       )}
 
       {/* ── Day strip ─────────────────────────────────────────── */}
@@ -372,12 +385,25 @@ export default function Challenges() {
           </span>
         </div>
         <div className="text-right">
-          <p className="eyebrow text-[9px]">Rank</p>
+          {/* Ranked within your own column, so the label has to say
+              which one — otherwise a Pacesetter sees "Rank 2" and
+              wonders why they aren't second on the podium. */}
+          <p className="eyebrow text-[9px]">
+            {data.isPacesetter ? "Pacesetters" : "Rank"}
+          </p>
           <span className="readout text-xl block mt-1">
             {data.myRank ?? "—"}
           </span>
         </div>
       </div>
+
+      {data.isPacesetter && (
+        <p className="split text-chalk-dim text-center leading-relaxed">
+          You&apos;re in the Pacesetters column — same challenges, ranked
+          among the regular runners. The weekly champion slots go to the
+          Open board.
+        </p>
+      )}
 
       {/* ── Champion boxes ────────────────────────────────────── */}
       <div>
@@ -446,6 +472,61 @@ export default function Challenges() {
         Challenge points reset every Monday and don&apos;t affect the season
         leaderboard.
       </p>
+    </div>
+  );
+}
+
+/** One ranked column of the expanded weekly leaderboard. */
+function BoardColumn({
+  title,
+  list,
+  muted = false,
+}: {
+  title: string;
+  list: any[];
+  muted?: boolean;
+}) {
+  return (
+    <div>
+      <p className="eyebrow text-[9px] mb-1.5 px-1">{title}</p>
+
+      {list.length > 0 ? (
+        <div className="bib divide-y divide-ink-800">
+          {list.map((p: any, i: number) => {
+            // Names are long and the column is half a phone wide, so
+            // show the first name and a last initial rather than
+            // truncating everyone to the same three letters.
+            const parts = String(p.name ?? "").trim().split(/\s+/);
+            const short =
+              parts.length > 1
+                ? `${parts[0]} ${parts[parts.length - 1][0]}`
+                : parts[0] ?? "";
+
+            return (
+              <div
+                key={p.user_id}
+                className="flex items-center gap-2 px-2.5 py-2"
+              >
+                <span className="split text-chalk-dim w-3 shrink-0 text-[10px]">
+                  {i + 1}
+                </span>
+                <span className="text-[13px] flex-1 truncate">{short}</span>
+                <span
+                  className={`readout text-[13px] shrink-0 ${
+                    muted ? "text-chalk-dim" : ""
+                  }`}
+                >
+                  {p.points}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="bib px-3 py-3">
+          <p className="split text-chalk-dim text-[10px]">Nobody yet.</p>
+        </div>
+      )}
     </div>
   );
 }

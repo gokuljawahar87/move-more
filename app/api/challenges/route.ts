@@ -13,6 +13,7 @@ import { cookies } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { SEASON, activeSeason } from "@/lib/season";
 import { istDayKey } from "@/lib/streak";
+import { isPacesetter } from "@/lib/divisions";
 import {
   challengesForDate,
   evaluateRange,
@@ -63,6 +64,7 @@ export async function GET(req: Request) {
         seasonStart: istDayKey(SEASON.start),
         schedule: [],
         leaderboard: [],
+        pacesetters: [],
         leaderboardMen: [],
         leaderboardWomen: [],
         me: null,
@@ -153,11 +155,20 @@ export async function GET(req: Request) {
       .filter((p: BoardEntry) => p.points > 0)
       .sort((a: BoardEntry, b: BoardEntry) => b.points - a.points);
 
-    const boardMen = allEntries.filter((p: BoardEntry) => p.gender === "M");
-    const boardWomen = allEntries.filter((p: BoardEntry) => p.gender === "F");
+    // Regular runners play as normal but are ranked separately, and are
+    // not eligible for the weekly champion slots.
+    const pacesetters = allEntries.filter((p: BoardEntry) =>
+      isPacesetter(p.user_id)
+    );
+    const openBoard = allEntries.filter(
+      (p: BoardEntry) => !isPacesetter(p.user_id)
+    );
+
+    const boardMen = openBoard.filter((p: BoardEntry) => p.gender === "M");
+    const boardWomen = openBoard.filter((p: BoardEntry) => p.gender === "F");
 
     // Kept for the champion boxes, which crown one winner per week
-    const board = allEntries;
+    const board = openBoard;
 
     const myRow = meId ? (rows ?? []).find((p: any) => p.user_id === meId) : null;
     const myActs = myRow?.activities ?? [];
@@ -256,15 +267,22 @@ export async function GET(req: Request) {
       goalsDone,
       goalsTotal,
       leaderboard: board.slice(0, 25),
+      pacesetters: pacesetters.slice(0, 25),
+      isPacesetter: meId ? isPacesetter(meId) : false,
       leaderboardMen: boardMen.slice(0, 25),
       leaderboardWomen: boardWomen.slice(0, 25),
       myGender: meId ? genderOf.get(meId) ?? "M" : null,
       // The visible weekly board is combined, so rank is against everyone
+      // Ranked within your own column
       myRank: meId
-        ? board.findIndex((b: BoardEntry) => b.user_id === meId) + 1 || null
+        ? (isPacesetter(meId) ? pacesetters : board).findIndex(
+            (b: BoardEntry) => b.user_id === meId
+          ) + 1 || null
         : null,
+      // Look this up across EVERYONE, not just the Open column — a
+      // Pacesetter isn't in `board`, so their own total came back as 0.
       myPoints: meId
-        ? board.find((b: BoardEntry) => b.user_id === meId)?.points ?? 0
+        ? allEntries.find((b: BoardEntry) => b.user_id === meId)?.points ?? 0
         : 0,
       champions: boxes,
     });
