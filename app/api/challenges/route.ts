@@ -82,7 +82,13 @@ export async function GET(req: Request) {
     // ── Everyone's activities for this week ──────────────────────
     const firstDay = days[0];
     const lastDay = days[days.length - 1];
-    const rangeStart = new Date(`${firstDay}T00:00:00+05:30`);
+    // Reach back a further 7 days. "Better Than Before" compares this
+    // week's distance against last week's, so without the previous
+    // week loaded it sees no history — and used to read that as
+    // "nothing to beat" and award the points to everyone.
+    const rangeStart = new Date(
+      new Date(`${firstDay}T00:00:00+05:30`).getTime() - 7 * 24 * 60 * 60 * 1000
+    );
     const rangeEnd = new Date(`${lastDay}T23:59:59+05:30`);
 
     const { data: rows, error } = await supabaseAdmin

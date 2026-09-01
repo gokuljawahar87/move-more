@@ -1,13 +1,14 @@
 // app/api/team-performance/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { SEASON, activeSeason, SYNC_FLOOR } from "@/lib/season";
+import { SEASON, activeSeason, SYNC_FLOOR, displayWindowStart } from "@/lib/season";
 import { DailyPoints, disciplineOf } from "@/lib/points";
 
 // Challenge start (1 Oct 2025, 00:00 IST)
 // Season dates now come from lib/season.ts, replacing the six
 // hardcoded copies of this constant.
 const CHALLENGE_START = SEASON.start;
+const CHALLENGE_END = SEASON.end;
 // Work-hour exclusion active from 16 Oct 2025
 // Exclusion applies from the start of the sync window, not a fixed
 // October 2025 date.
@@ -82,7 +83,11 @@ export async function GET(request: Request) {
       .eq("season", SEASON.number)
       // Only the season currently on display: trial data before Sep 1,
       // Season 2 after. Season 1 is never shown.
-      .eq("activities.season", activeSeason());
+      .eq("activities.season", activeSeason())
+      // Date floor as well as the season tag: the season column has a
+      // DEFAULT of 2, so a row written without it set explicitly would
+      // otherwise surface regardless of when it happened.
+      .gte("activities.start_date", displayWindowStart().toISOString());
 
     // Apply challenge start cutoff
     if (now >= CHALLENGE_START) {
@@ -126,6 +131,17 @@ export async function GET(request: Request) {
           if (!a?.is_valid || !a.start_date) continue;
 
           const startUTC = new Date(a.start_date);
+
+          // ── Season window, enforced per activity ──────────────
+          // The query filter alone proved insufficient on the
+          // leaderboard: activities outside the season still reached
+          // the summing loop and inflated totals. The `season` column
+          // can't be relied on either — it has a DEFAULT of 2, so any
+          // row written by a route that doesn't set it explicitly
+          // lands in the live season regardless of its date.
+          if (startUTC < CHALLENGE_START) continue;
+          if (startUTC >= CHALLENGE_END) continue;
+
           // A declared leave day lifts the office-hours exclusion.
           if (!a.on_leave_day && overlapsWorkingHours(startUTC, a.moving_time || 0)) continue;
 

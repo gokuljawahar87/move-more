@@ -2,14 +2,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Link2, X, Scale } from "lucide-react";
+import { Link2, X, Scale, HelpCircle } from "lucide-react";
 import { SEASON, getSeasonStatus, type SeasonStatus } from "@/lib/season";
 import WeightLogger from "./WeightLogger";
+import HelpSheet from "./HelpSheet";
 
 export function Header({ isGuest = false }: { isGuest?: boolean }) {
   const [initials, setInitials] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [weightOpen, setWeightOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [status, setStatus] = useState<SeasonStatus | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -102,9 +104,19 @@ export function Header({ isGuest = false }: { isGuest?: boolean }) {
           </div>
 
           {!isGuest && (
-            <div className="flex items-center gap-2.5 shrink-0">
-            {/* Sized to match the profile avatar so the two read as a
-                pair rather than an icon crowding a button. */}
+            <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setHelpOpen(true)}
+              aria-label="How it works"
+              className="w-9 h-9 flex items-center justify-center rounded-full
+                         border border-ink-700 text-chalk-dim
+                         hover:text-tape hover:border-tape transition-colors shrink-0"
+            >
+              <HelpCircle size={17} strokeWidth={2} />
+            </button>
+
+            {/* Sized to match the profile avatar so they read as a set
+                rather than icons crowding a button. */}
             <button
               onClick={() => setWeightOpen(true)}
               aria-label="Log your weight"
@@ -224,6 +236,7 @@ export function Header({ isGuest = false }: { isGuest?: boolean }) {
       </header>
 
       <WeightLogger open={weightOpen} onClose={() => setWeightOpen(false)} />
+      <HelpSheet open={helpOpen} onClose={() => setHelpOpen(false)} />
     </>
   );
 }

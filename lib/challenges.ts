@@ -380,8 +380,14 @@ function progressFor(
     }
 
     case "two-a-day": {
+      // Run, walk or cycle only — the same disciplines that score
+      // points. Without this, two gym or yoga sessions completed it,
+      // which no other challenge allows.
       const need = c.minutes ?? 0;
-      return ratio(acts.filter((a) => mins(a) >= need).length, 2);
+      const qualifying = acts.filter(
+        (a) => kindOf(a) !== "other" && mins(a) >= need
+      );
+      return ratio(qualifying.length, 2);
     }
 
     case "mix": {
@@ -483,6 +489,24 @@ export function evaluateDay(
   activities: DayActivity[],
   history: DayActivity[] = []
 ): DayEvaluation {
+  // A day that hasn't happened yet can't have been completed. Without
+  // this, challenges whose rule can be satisfied by absence — "beat last
+  // week", where no last week reads as nothing to beat — were awarding
+  // points for days still in the future.
+  const today = istDayKey(new Date());
+  if (dayKey > today) {
+    return {
+      date: dayKey,
+      results: challengesForDate(dayKey).map((c) => ({
+        ...c,
+        progress: 0,
+        completed: false,
+      })),
+      earned: 0,
+      cleanSweep: false,
+    };
+  }
+
   const todays = activities.filter(
     (a) => countsToday(a) && istDayKey(new Date(a.start_date)) === dayKey
   );

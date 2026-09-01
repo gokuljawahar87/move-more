@@ -17,10 +17,18 @@ export const SEASON = {
   // Monday morning. 1 Sep is a Tuesday, so week 1 is a 6-day week
   // (Tue–Sun) and every week after is a full Mon–Sun.
   //
-  // Ending on Sunday 25 Oct gives exactly 8 weeks. Ending 31 Oct would
-  // give 9, the last a 6-day stub finishing on a Saturday.
+  // Two different end dates, deliberately:
+  //
+  //   end          — the event itself, 31 Oct. Drives the header
+  //                  countdown, scoring, and the Champions tab.
+  //   challengeEnd — the weekly challenges, 25 Oct. A Sunday, which
+  //                  gives exactly 8 Monday-to-Sunday weeks. Running
+  //                  them to the 31st would add a 6-day stub week
+  //                  ending on a Saturday, so the final weekly winner
+  //                  couldn't be announced on a Monday.
   start: new Date("2026-09-01T00:00:00+05:30"),
-  end: new Date("2026-10-25T22:00:00+05:30"),
+  end: new Date("2026-10-31T22:00:00+05:30"),
+  challengeEnd: new Date("2026-10-25T22:00:00+05:30"),
 
   // Trial period — the app is open, but nothing here is ever scored.
   // Its purpose is to collect real fraud examples so the detection
