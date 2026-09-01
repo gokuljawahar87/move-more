@@ -157,15 +157,6 @@ export async function POST(req: Request) {
       `🧭 ${user_id}: Strava returned ${allActivities.length}, ${filtered.length} within window since ${fetchFrom.toISOString()}`
     );
 
-    if (filtered.length === 0) {
-      return NextResponse.json({
-        success: true,
-        refreshed: 0,
-        skipped: true,
-        fetchedFromStrava: allActivities.length,
-        message: "Strava responded, but no non-manual activities in the window.",
-      });
-    }
 
     // ── Declared leave days ──────────────────────────────────────────
     // Needed at sync time so activities arriving later still pick up an
@@ -257,9 +248,42 @@ export async function POST(req: Request) {
       if (upsertError) throw upsertError;
     }
 
+    // ── Remove anything deleted on Strava ────────────────────────────
+    // Scoped to the window we actually fetched. The fetch succeeded to
+    // reach this point, so a missing activity here genuinely means the
+    // person removed it — not that a page failed to load.
+    const fetchedIds = new Set(allActivities.map((a: any) => String(a.id)));
+
+    const goneIds = (existingActs || [])
+      .filter((a: any) => {
+        if (a.is_valid_locked) return false; // a manual verdict stands
+        const start = new Date(a.start_date);
+        if (start < fetchFrom) return false; // outside what we fetched
+        return !fetchedIds.has(String(a.strava_id));
+      })
+      .map((a: any) => a.strava_id);
+
+    let deleted = 0;
+
+    // Same ceiling as the master refresh: a large number here means
+    // something is off, not that someone deleted their whole week.
+    if (goneIds.length > 0 && goneIds.length <= 15) {
+      const { error: delError } = await supabaseAdmin
+        .from("activities")
+        .delete()
+        .in("strava_id", goneIds)
+        .eq("user_id", user_id);
+
+      if (!delError) {
+        deleted = goneIds.length;
+        console.log(`🗑️ ${user_id}: removed ${deleted} deleted from Strava`);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       refreshed: upserts.length,
+      deleted,
       fetchedFromStrava: allActivities.length,
       message: `Synced ${upserts.length} activities.`,
     });

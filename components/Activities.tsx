@@ -123,14 +123,20 @@ export function Activities() {
         return;
       }
 
-      if (result.skipped) {
+      const added = result.refreshed || 0;
+      const removed = result.deleted || 0;
+
+      if (added === 0 && removed === 0) {
         setToast(
           result.fetchedFromStrava === 0
             ? "Nothing new on Strava yet."
-            : "No new activities to add."
+            : "Already up to date."
         );
       } else {
-        setToast(`Added ${result.refreshed || 0} activities.`);
+        const parts: string[] = [];
+        if (added) parts.push(`${added} added`);
+        if (removed) parts.push(`${removed} removed`);
+        setToast(parts.join(", ") + ".");
       }
 
       await fetchActivities();

@@ -12,7 +12,10 @@ const SYNC_START = SYNC_FLOOR;
 const SYNC_END: Date | null = null;
 
 // Deletion of vanished activities stays off through the trial.
-const ENABLE_DELETIONS = false;
+// Activities deleted on Strava are removed here too. Guarded by
+// fetchOk below: a partial fetch must never be read as "everything
+// else was deleted".
+const ENABLE_DELETIONS = true;
 
 async function runRefresh() {
   // Only people who have registered for THIS season. Without this the
@@ -106,6 +109,8 @@ async function runRefresh() {
     const afterEpoch = Math.floor(SYNC_START.getTime() / 1000);
     const allActivities: any[] = [];
     let page = 1;
+    // Only trust the fetch for deletions if every page came back.
+    let fetchOk = true;
 
     while (page <= 10) {
       const res = await fetch(
@@ -114,6 +119,7 @@ async function runRefresh() {
       );
 
       if (!res.ok) {
+        fetchOk = false;
         failures.push({
           user_id: profile.user_id,
           reason: `activities_${res.status}`,
@@ -166,7 +172,9 @@ async function runRefresh() {
     );
 
     // ── Optional cleanup of deleted-on-Strava activities ───────────
-    if (ENABLE_DELETIONS) {
+    // A partial fetch would make every unfetched activity look deleted,
+    // so skip the cleanup entirely unless the whole window came back.
+    if (ENABLE_DELETIONS && fetchOk) {
       const stravaIds = new Set(freshStrava.map((a: any) => String(a.id)));
       const deletedIds = (existing || [])
         .filter(
@@ -177,13 +185,26 @@ async function runRefresh() {
         )
         .map((a) => a.strava_id);
 
-      if (deletedIds.length) {
+      // A sanity ceiling. Losing a handful to a genuine deletion is
+      // normal; losing dozens at once means something is wrong with the
+      // fetch, and it's better to skip than to destroy the season.
+      const tooMany = deletedIds.length > 25;
+
+      if (deletedIds.length && !tooMany) {
         await supabaseAdmin
           .from("activities")
           .delete()
           .in("strava_id", deletedIds)
           .eq("user_id", profile.user_id);
         cleanedUsers++;
+        console.log(
+          `🗑️ ${profile.user_id}: removed ${deletedIds.length} deleted from Strava`
+        );
+      } else if (tooMany) {
+        failures.push({
+          user_id: profile.user_id,
+          reason: `skipped_bulk_delete_${deletedIds.length}`,
+        });
       }
     }
 
