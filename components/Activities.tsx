@@ -46,6 +46,9 @@ export function Activities() {
   const [weeksOrder, setWeeksOrder] = useState<string[]>([]);
   const [currentWeekIndex, setCurrentWeekIndex] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
+  // Strava's rate limit is shared across everyone using the app, so one
+  // person holding down the button degrades it for the whole team.
+  const [cooldownUntil, setCooldownUntil] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
   async function fetchActivities() {
@@ -88,8 +91,15 @@ export function Activities() {
   }, []);
 
   async function handleRefresh() {
+    if (Date.now() < cooldownUntil) {
+      setToast("Just a moment — try again shortly.");
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
+
     try {
       setRefreshing(true);
+      setCooldownUntil(Date.now() + 15_000);
       const user_id = localStorage.getItem("user_id");
       if (!user_id) {
         setToast("⚠️ User not logged in.");
@@ -106,15 +116,21 @@ export function Activities() {
 
       if (!res.ok) {
         console.error("Manual refresh failed:", result);
-        setToast("❌ Failed to refresh activities.");
+        // Tell people what actually happened. A rate limit isn't a
+        // failure on their part, and their activity will still arrive.
+        setToast(result.message ?? "Couldn't refresh. Try again shortly.");
+        if (res.status === 429) setCooldownUntil(Date.now() + 60_000);
         return;
       }
 
       if (result.skipped) {
-        setToast("ℹ️ No new or updated activities.");
+        setToast(
+          result.fetchedFromStrava === 0
+            ? "Nothing new on Strava yet."
+            : "No new activities to add."
+        );
       } else {
-        const msg = `✅ ${result.refreshed || 0} updated, ${result.deleted || 0} deleted.`;
-        setToast(msg);
+        setToast(`Added ${result.refreshed || 0} activities.`);
       }
 
       await fetchActivities();

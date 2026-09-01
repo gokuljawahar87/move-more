@@ -4,194 +4,477 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { SEASON, activeSeason, SYNC_FLOOR } from "@/lib/season";
 import { DailyPoints, disciplineOf } from "@/lib/points";
-import { computeStreaks } from "@/lib/streak";
+import {
+  computeStreaks,
+  qualifiesForStreak,
+  istDayKey,
+} from "@/lib/streak";
 
 // ─────────────────────────────────────────────────────────────
-// Season dates come from lib/season.ts
+// SEASON WINDOW
+//
 // Season 2:
-// Start: 1 Sep 2026, 00:00 IST
-// End:   25 Oct 2026, 22:00 IST
+// Start: 01 Sep 2026 00:00 IST
+// End:   31 Oct 2026
+//
+// IMPORTANT:
+// We use the actual activity start_date as the authoritative
+// date for leaderboard eligibility.
 // ─────────────────────────────────────────────────────────────
 
 const CHALLENGE_START = SEASON.start;
+
+// Do not hardcode the end date here.
+// SEASON.end should be:
+// 31 Oct 2026, 23:59:59 IST
 const CHALLENGE_END = SEASON.end;
 
-// Exclusion applies from the start of the sync window.
+// Exclusion starts from sync floor.
 const EXCLUDE_START = SYNC_FLOOR;
+
+// ─────────────────────────────────────────────────────────────
+// OFFICE HOURS
+// ─────────────────────────────────────────────────────────────
 
 const WORK_START = { hour: 7, minute: 30 };
 const WORK_END = { hour: 15, minute: 45 };
 
-// Holidays come from lib/season.ts
-const HOLIDAYS: string[] = (SEASON as any).holidays ?? [];
+const HOLIDAYS: string[] =
+  (SEASON as any).holidays ?? [];
 
 // ─────────────────────────────────────────────────────────────
-// Check whether an activity overlaps office working hours.
+// IST HELPERS
+//
+// Uses Intl.DateTimeFormat rather than converting a localized
+// string back into a Date object.
+// ─────────────────────────────────────────────────────────────
+
+function getISTParts(date: Date) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    weekday: "short",
+  });
+
+  const parts = formatter.formatToParts(date);
+
+  const get = (type: string) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+
+  return {
+    year: Number(get("year")),
+    month: Number(get("month")),
+    day: Number(get("day")),
+    hour: Number(get("hour")) % 24,
+    minute: Number(get("minute")),
+    weekday: get("weekday"),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// OFFICE-HOURS OVERLAP
 //
 // Working hours:
-// 07:30 – 15:45 IST
+// Monday-Friday
+// 07:30 - 15:45 IST
 //
-// Activities overlapping this window on working days are excluded,
-// unless the activity is marked as a leave-day activity.
+// Leave-day activities bypass the exclusion in the caller.
 // ─────────────────────────────────────────────────────────────
 
 function overlapsWorkingHours(
   startUTC: Date,
   durationSec: number
 ): boolean {
-  const istStart = new Date(
-    startUTC.toLocaleString("en-US", {
-      timeZone: "Asia/Kolkata",
-    })
-  );
+  // Anything before sync floor is not relevant.
+  if (startUTC < EXCLUDE_START) return false;
 
-  const istEnd = new Date(
-    istStart.getTime() + durationSec * 1000
-  );
-
-  // Anything before the sync floor is irrelevant.
-  if (istStart < EXCLUDE_START) return false;
-
-  const day = istStart.getDay();
+  const ist = getISTParts(startUTC);
 
   // Sunday / Saturday
-  if (day === 0 || day === 6) return false;
+  if (ist.weekday === "Sun" || ist.weekday === "Sat") {
+    return false;
+  }
 
-  const isoDate = istStart.toISOString().split("T")[0];
+  // Build an IST calendar-date string.
+  const isoDate =
+    `${ist.year}-${String(ist.month).padStart(2, "0")}-${String(
+      ist.day
+    ).padStart(2, "0")}`;
 
-  // Declared holiday
-  if (HOLIDAYS.includes(isoDate)) return false;
+  // Holiday
+  if (HOLIDAYS.includes(isoDate)) {
+    return false;
+  }
 
-  const workStart = new Date(istStart);
-  workStart.setHours(
-    WORK_START.hour,
-    WORK_START.minute,
-    0,
-    0
+  const startMinutes =
+    ist.hour * 60 + ist.minute;
+
+  const durationMinutes =
+    Math.round(Number(durationSec || 0) / 60);
+
+  const endMinutes =
+    startMinutes + durationMinutes;
+
+  const workStartMinutes =
+    WORK_START.hour * 60 + WORK_START.minute;
+
+  const workEndMinutes =
+    WORK_END.hour * 60 + WORK_END.minute;
+
+  return (
+    startMinutes <= workEndMinutes &&
+    endMinutes >= workStartMinutes
   );
-
-  const workEnd = new Date(istStart);
-  workEnd.setHours(
-    WORK_END.hour,
-    WORK_END.minute,
-    0,
-    0
-  );
-
-  // Any overlap with 07:30–15:45 is excluded.
-  return istStart <= workEnd && istEnd >= workStart;
 }
 
 // ─────────────────────────────────────────────────────────────
-// GET /api/leaderboard
+// POINT ACHIEVEMENT
+//
+// Determines the first activity timestamp at which the user's
+// FINAL point total was reached.
+//
+// Because DailyPoints has a daily cap, we recreate the same
+// chronological accumulation here.
+//
+// Example:
+//
+// 100 points → Sep 1
+// 150 points → Sep 2 08:15
+//
+// pointsAchievedAt = Sep 2 08:15
+// ─────────────────────────────────────────────────────────────
+
+type CountedActivity = {
+  id?: string;
+  type?: string | null;
+  derived_type?: string | null;
+  distance?: number | null;
+  moving_time?: number | null;
+  start_date: string;
+  is_valid?: boolean | null;
+  on_leave_day?: boolean | null;
+};
+
+function calculatePointsAchievedAt(
+  activities: CountedActivity[],
+  finalPoints: number
+): number {
+  if (finalPoints <= 0 || activities.length === 0) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  // We need the activities in chronological order.
+  const chronological = [...activities].sort(
+    (a, b) =>
+      new Date(a.start_date).getTime() -
+      new Date(b.start_date).getTime()
+  );
+
+  // DailyPoints uses an IST calendar date and a 100-point cap.
+  const dailyPoints: Record<string, number> = {};
+
+  let cumulativePoints = 0;
+
+  for (const a of chronological) {
+    const day = istDayKey(
+      new Date(a.start_date)
+    );
+
+    const discipline = disciplineOf(
+      a.derived_type || a.type
+    );
+
+    const distanceKm =
+      Number(a.distance || 0) / 1000;
+
+    // Reproduce the scoring rates.
+    let activityPoints = 0;
+
+    if (discipline === "run") {
+      activityPoints = distanceKm * 22;
+    } else if (discipline === "walk") {
+      activityPoints = distanceKm * 14;
+    } else if (discipline === "cycle") {
+      activityPoints = distanceKm * 6;
+    }
+
+    if (activityPoints <= 0) continue;
+
+    const previousDayPoints =
+      dailyPoints[day] ?? 0;
+
+    const available =
+      Math.max(0, 100 - previousDayPoints);
+
+    const pointsAdded = Math.min(
+      activityPoints,
+      available
+    );
+
+    if (pointsAdded <= 0) continue;
+
+    dailyPoints[day] =
+      previousDayPoints + pointsAdded;
+
+    cumulativePoints += pointsAdded;
+
+    // Floating-point arithmetic can produce values such as
+    // 99.9999999997, so use a tiny tolerance.
+    if (
+      cumulativePoints >=
+      finalPoints - 0.000001
+    ) {
+      return new Date(
+        a.start_date
+      ).getTime();
+    }
+  }
+
+  return Number.MAX_SAFE_INTEGER;
+}
+
+// ─────────────────────────────────────────────────────────────
+// STREAK ACHIEVEMENT
+//
+// Your streak implementation defines a streak using qualifying
+// IST calendar days.
+//
+// We determine when the FINAL current streak length was first
+// reached.
+//
+// Example:
+//
+// Sep 1 → qualifying
+// Sep 2 → qualifying
+// Sep 3 → qualifying
+//
+// Current streak = 3
+// Achievement date = Sep 3
+//
+// Earlier 3-day streaks are not relevant if the current streak
+// is longer.
+// ─────────────────────────────────────────────────────────────
+
+function calculateStreakAchievedAt(
+  activities: CountedActivity[],
+  currentStreak: number
+): number {
+  if (
+    currentStreak <= 0 ||
+    activities.length === 0
+  ) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  // Get qualifying activities using exactly the same
+  // qualification rules as lib/streak.ts.
+  const qualifyingDays = new Set<string>();
+
+  for (const a of activities) {
+    if (!qualifiesForStreak(a)) {
+      continue;
+    }
+
+    const day = istDayKey(
+      new Date(a.start_date)
+    );
+
+    qualifyingDays.add(day);
+  }
+
+  if (qualifyingDays.size === 0) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  const sortedDays = [
+    ...qualifyingDays,
+  ].sort();
+
+  // Find the first date on which a streak of the final
+  // currentStreak length was completed.
+  let run = 0;
+  let previousDay: string | null = null;
+
+  let achievementDay: string | null = null;
+
+  function addDays(
+    key: string,
+    delta: number
+  ): string {
+    const [y, m, d] =
+      key.split("-").map(Number);
+
+    const dt = new Date(
+      Date.UTC(y, m - 1, d)
+    );
+
+    dt.setUTCDate(
+      dt.getUTCDate() + delta
+    );
+
+    return dt.toISOString().slice(0, 10);
+  }
+
+  for (const day of sortedDays) {
+    run =
+      previousDay &&
+      addDays(previousDay, 1) === day
+        ? run + 1
+        : 1;
+
+    if (
+      run >= currentStreak &&
+      achievementDay === null
+    ) {
+      achievementDay = day;
+      break;
+    }
+
+    previousDay = day;
+  }
+
+  if (!achievementDay) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  // Find the earliest qualifying activity on that final
+  // streak-achievement day.
+  const matchingActivities = activities
+    .filter((a) => {
+      if (!qualifiesForStreak(a)) {
+        return false;
+      }
+
+      return (
+        istDayKey(
+          new Date(a.start_date)
+        ) === achievementDay
+      );
+    })
+    .sort(
+      (a, b) =>
+        new Date(a.start_date).getTime() -
+        new Date(b.start_date).getTime()
+    );
+
+  if (!matchingActivities.length) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  return new Date(
+    matchingActivities[0].start_date
+  ).getTime();
+}
+
+// ─────────────────────────────────────────────────────────────
+// GET
 // ─────────────────────────────────────────────────────────────
 
 export async function GET() {
   try {
     const now = new Date();
 
-    // ───────────────────────────────────────────────────────────
-    // Fetch registered Season 2 profiles + valid Season 2
-    // activities.
+    // ─────────────────────────────────────────────────────────
+    // Fetch Season 2 profiles and activities.
     //
     // IMPORTANT:
-    // We ALSO filter activities by their actual start_date.
-    //
-    // The "season" column alone is NOT sufficient because older
-    // routes/database defaults may have incorrectly tagged older
-    // activities as Season 2.
-    // ───────────────────────────────────────────────────────────
+    // season = 2 alone is NOT trusted as the date boundary.
+    // Actual start_date is also checked.
+    // ─────────────────────────────────────────────────────────
 
-    const { data: rawProfiles, error } = await supabaseAdmin
-      .from("profiles")
-      .select(`
-        user_id,
-        first_name,
-        last_name,
-        team,
-        activities (
-          id,
-          type,
-          derived_type,
-          distance,
-          moving_time,
-          start_date,
-          is_valid,
-          on_leave_day
+    const { data: rawProfiles, error } =
+      await supabaseAdmin
+        .from("profiles")
+        .select(`
+          user_id,
+          first_name,
+          last_name,
+          team,
+          activities (
+            id,
+            type,
+            derived_type,
+            distance,
+            moving_time,
+            start_date,
+            is_valid,
+            on_leave_day
+          )
+        `)
+        .eq("activities.is_valid", true)
+        .eq("season", SEASON.number)
+        .eq(
+          "activities.season",
+          activeSeason()
         )
-      `)
-      .eq("activities.is_valid", true)
+        .gte(
+          "activities.start_date",
+          CHALLENGE_START.toISOString()
+        )
+        .lt(
+          "activities.start_date",
+          CHALLENGE_END.toISOString()
+        );
 
-      // Only employees registered for the current season.
-      .eq("season", SEASON.number)
-
-      // Only activities tagged to the currently displayed season.
-      .eq("activities.season", activeSeason())
-
-      // ────────────────────────────────────────────────────────
-      // CRITICAL DATE FILTER
-      //
-      // Season 2 starts at:
-      // 1 Sep 2026 00:00 IST
-      //
-      // Anything before this is trial / historical data and
-      // MUST NOT contribute to Season 2 leaderboard points.
-      // ────────────────────────────────────────────────────────
-      .gte(
-        "activities.start_date",
-        CHALLENGE_START.toISOString()
-      )
-
-      // Do not allow activities after the Season 2 end.
-      .lt(
-        "activities.start_date",
-        CHALLENGE_END.toISOString()
-      );
-
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
     let profiles = rawProfiles ?? [];
 
-    // ───────────────────────────────────────────────────────────
-    // Additional profile-level filtering.
-    //
-    // A profile should only appear if it has at least one
-    // qualifying Season 2 activity.
-    // ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
+    // Keep only profiles having at least one activity inside
+    // the Season 2 window.
+    // ─────────────────────────────────────────────────────────
 
     if (now >= CHALLENGE_START) {
-      profiles = profiles.filter((p: any) =>
-        p.activities?.some((a: any) => {
-          if (!a?.start_date) return false;
+      profiles = profiles.filter(
+        (p: any) =>
+          p.activities?.some(
+            (a: any) => {
+              if (!a?.start_date) {
+                return false;
+              }
 
-          const activityDate = new Date(a.start_date);
+              const date =
+                new Date(a.start_date);
 
-          return (
-            activityDate >= CHALLENGE_START &&
-            activityDate < CHALLENGE_END
-          );
-        })
+              return (
+                date >= CHALLENGE_START &&
+                date < CHALLENGE_END
+              );
+            }
+          )
       );
     }
 
-    // ───────────────────────────────────────────────────────────
-    // Gender mapping
-    // ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
+    // Gender
+    // ─────────────────────────────────────────────────────────
 
-    const { data: genderRows } = await supabaseAdmin
-      .from("employee_master")
-      .select("user_id, gender");
+    const { data: genderRows } =
+      await supabaseAdmin
+        .from("employee_master")
+        .select("user_id, gender");
 
-    const genderDict: Record<string, string> = {};
+    const genderDict: Record<
+      string,
+      string
+    > = {};
 
     genderRows?.forEach((r) => {
       genderDict[r.user_id] =
         r.gender?.toUpperCase?.() ?? "NA";
     });
 
-    // ───────────────────────────────────────────────────────────
-    // Empty leaderboard
-    // ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
+    // Empty response
+    // ─────────────────────────────────────────────────────────
 
     if (!profiles.length) {
       return NextResponse.json({
@@ -203,9 +486,9 @@ export async function GET() {
       });
     }
 
-    // ───────────────────────────────────────────────────────────
-    // User leaderboard row
-    // ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
+    // USER ROW
+    // ─────────────────────────────────────────────────────────
 
     type UserRow = {
       user_id: string;
@@ -220,77 +503,88 @@ export async function GET() {
       points: number;
       streak: number;
       active: boolean;
+
+      // Internal tie-break fields.
+      pointsAchievedAt: number;
+      streakAchievedAt: number;
     };
 
-    const userTotals: Record<string, UserRow> = {};
+    const userTotals: Record<
+      string,
+      UserRow
+    > = {};
 
-    // ───────────────────────────────────────────────────────────
-    // Registered members per team.
-    //
-    // Used for participation calculations.
-    // ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
+    // TEAM ROSTER
+    // ─────────────────────────────────────────────────────────
 
-    const teamRoster: Record<string, number> = {};
+    const teamRoster: Record<
+      string,
+      number
+    > = {};
 
-    // ───────────────────────────────────────────────────────────
-    // Calculate each user's Season 2 totals.
-    // ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
+    // PROCESS USERS
+    // ─────────────────────────────────────────────────────────
 
     for (const profile of profiles) {
-      const team = profile.team ?? null;
+      const team =
+        profile.team ?? null;
 
       if (team) {
         teamRoster[team] =
           (teamRoster[team] ?? 0) + 1;
       }
 
-      const acts = Array.isArray(profile.activities)
+      const acts = Array.isArray(
+        profile.activities
+      )
         ? profile.activities
         : [];
 
-      // DailyPoints:
-      // - Points are capped per person per IST day.
-      // - Distance is NOT capped.
       const acc = new DailyPoints();
 
-      // Activities that actually count for streak calculation.
-      const counted: any[] = [];
+      const counted: CountedActivity[] =
+        [];
+
+      // ───────────────────────────────────────────────────────
+      // QUALIFY ACTIVITIES
+      // ───────────────────────────────────────────────────────
 
       for (const a of acts) {
-        if (!a?.is_valid || !a.start_date) continue;
-
-        const startUTC = new Date(a.start_date);
-
-        // ──────────────────────────────────────────────────────
-        // 🚨 CRITICAL SEASON 2 CUTOFF
-        //
-        // NOTHING before 1 Sep 2026 can contribute to:
-        // - points
-        // - distance
-        // - streaks
-        // - active participation
-        //
-        // This is the protection against old/trial activities
-        // incorrectly tagged with season = 2.
-        // ──────────────────────────────────────────────────────
-
-        if (startUTC < CHALLENGE_START) {
+        if (
+          !a?.is_valid ||
+          !a.start_date
+        ) {
           continue;
         }
 
-        // ──────────────────────────────────────────────────────
-        // Do not score activities after Season 2 ends.
-        // ──────────────────────────────────────────────────────
+        const startUTC =
+          new Date(a.start_date);
 
-        if (startUTC >= CHALLENGE_END) {
+        // ────────────────────────────────────────────────────
+        // SEASON 2 START CUTOFF
+        // ────────────────────────────────────────────────────
+
+        if (
+          startUTC < CHALLENGE_START
+        ) {
           continue;
         }
 
-        // ──────────────────────────────────────────────────────
-        // Office-hours exclusion.
-        //
-        // A leave-day activity bypasses the exclusion.
-        // ──────────────────────────────────────────────────────
+        // ────────────────────────────────────────────────────
+        // SEASON 2 END CUTOFF
+        // ────────────────────────────────────────────────────
+
+        if (
+          startUTC >= CHALLENGE_END
+        ) {
+          continue;
+        }
+
+        // ────────────────────────────────────────────────────
+        // OFFICE-HOURS EXCLUSION
+        // ────────────────────────────────────────────────────
 
         if (
           !a.on_leave_day &&
@@ -302,21 +596,10 @@ export async function GET() {
           continue;
         }
 
-        // ──────────────────────────────────────────────────────
-        // This activity has passed ALL qualification checks.
-        // ──────────────────────────────────────────────────────
-
+        // Activity is fully qualified.
         counted.push(a);
 
-        // ──────────────────────────────────────────────────────
-        // Add distance and points.
-        //
-        // DailyPoints handles:
-        // - Run / Walk / Cycle classification
-        // - IST calendar-day grouping
-        // - 100 point daily cap
-        // ──────────────────────────────────────────────────────
-
+        // Add to DailyPoints.
         acc.add(
           a.start_date,
           disciplineOf(
@@ -326,61 +609,127 @@ export async function GET() {
         );
       }
 
-      // ─────────────────────────────────────────────────────────
-      // Final user totals
-      // ─────────────────────────────────────────────────────────
+      // ───────────────────────────────────────────────────────
+      // TOTALS
+      // ───────────────────────────────────────────────────────
 
-      const { run, walk, cycle } = acc.km;
+      const {
+        run,
+        walk,
+        cycle,
+      } = acc.km;
+
       const points = acc.points;
+
+      // ───────────────────────────────────────────────────────
+      // STREAK
+      //
+      // computeStreaks uses the exact rules from lib/streak.ts.
+      // ───────────────────────────────────────────────────────
+
+      const streakResult =
+        computeStreaks(counted);
+
+      const streak =
+        streakResult.currentStreak;
+
+      // ───────────────────────────────────────────────────────
+      // TIE-BREAK TIMESTAMPS
+      // ───────────────────────────────────────────────────────
+
+      const pointsAchievedAt =
+        calculatePointsAchievedAt(
+          counted,
+          points
+        );
+
+      const streakAchievedAt =
+        calculateStreakAchievedAt(
+          counted,
+          streak
+        );
+
+      // ───────────────────────────────────────────────────────
+      // STORE USER
+      // ───────────────────────────────────────────────────────
 
       userTotals[profile.user_id] = {
         user_id: profile.user_id,
 
-        name: `${profile.first_name || ""} ${
-          profile.last_name || ""
-        }`.trim(),
+        name:
+          `${profile.first_name || ""} ${
+            profile.last_name || ""
+          }`.trim(),
 
         team,
 
         gender:
-          genderDict[profile.user_id] ?? "NA",
+          genderDict[profile.user_id] ??
+          "NA",
 
         run,
         walk,
         cycle,
 
         points,
+        streak,
 
-        // Streak is calculated ONLY from qualifying
-        // Season 2 activities.
-        streak:
-          computeStreaks(counted).currentStreak,
+        active:
+          counted.length > 0,
 
-        // Active means at least one qualifying Season 2
-        // activity exists.
-        active: counted.length > 0,
+        pointsAchievedAt,
+        streakAchievedAt,
       };
     }
 
-    // ───────────────────────────────────────────────────────────
-    // Users
-    // ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
+    // USERS
+    // ─────────────────────────────────────────────────────────
 
-    const users = Object.values(userTotals);
+    const users =
+      Object.values(userTotals);
 
-    // Only users with points appear in scored leaderboards.
-    const scored = users.filter(
-      (u) => u.points > 0
-    );
+    const scored =
+      users.filter(
+        (u) => u.points > 0
+      );
+
+    // ─────────────────────────────────────────────────────────
+    // POINTS SORT
+    //
+    // 1. Higher points first
+    // 2. If tied → earlier achievement first
+    // 3. If still tied → user_id
+    //
+    // This guarantees deterministic ordering.
+    // ─────────────────────────────────────────────────────────
 
     const byPoints = (
       a: UserRow,
       b: UserRow
-    ) => b.points - a.points;
+    ) => {
+      if (b.points !== a.points) {
+        return b.points - a.points;
+      }
 
-    // ───────────────────────────────────────────────────────────
-    // TOP FEMALES
-    // ───────────────────────────────────────────────────────────
+      if (
+        a.pointsAchievedAt !==
+        b.pointsAchievedAt
+      ) {
+        return (
+          a.pointsAchievedAt -
+          b.pointsAchievedAt
+        );
+      }
+
+      return a.user_id.localeCompare(
+        b.user_id
+      );
+    };
+
+    // ─────────────────────────────────────────────────────────
+    // FEMALE PODIUM
+    // ─────────────────────────────────────────────────────────
 
     const topFemales = scored
       .filter((u) =>
@@ -389,33 +738,63 @@ export async function GET() {
       .sort(byPoints)
       .slice(0, 3);
 
-    // ───────────────────────────────────────────────────────────
-    // TOP MALES
-    // ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
+    // MALE PODIUM
+    // ─────────────────────────────────────────────────────────
 
     const topMales = scored
-      .filter((u) =>
-        !u.gender.startsWith("F")
+      .filter(
+        (u) =>
+          !u.gender.startsWith("F")
       )
       .sort(byPoints)
       .slice(0, 3);
 
-    // ───────────────────────────────────────────────────────────
-    // LONGEST CURRENT STREAKS
-    // ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
+    // STREAK SORT
+    //
+    // 1. Longer streak first
+    // 2. If tied → earlier achievement first
+    // 3. If still tied → points
+    // 4. If still tied → user_id
+    // ─────────────────────────────────────────────────────────
 
     const topStreaks = users
-      .filter((u) => u.streak > 0)
-      .sort(
-        (a, b) =>
-          b.streak - a.streak ||
-          b.points - a.points
+      .filter(
+        (u) => u.streak > 0
       )
+      .sort((a, b) => {
+        if (
+          b.streak !== a.streak
+        ) {
+          return b.streak - a.streak;
+        }
+
+        if (
+          a.streakAchievedAt !==
+          b.streakAchievedAt
+        ) {
+          return (
+            a.streakAchievedAt -
+            b.streakAchievedAt
+          );
+        }
+
+        if (
+          b.points !== a.points
+        ) {
+          return b.points - a.points;
+        }
+
+        return a.user_id.localeCompare(
+          b.user_id
+        );
+      })
       .slice(0, 3);
 
-    // ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
     // TEAM POINTS
-    // ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
 
     const teamTotals: Record<
       string,
@@ -435,20 +814,22 @@ export async function GET() {
         };
       }
 
-      teamTotals[u.team].points += u.points;
+      teamTotals[u.team].points +=
+        u.points;
     }
 
-    const teams = Object.values(teamTotals)
+    const teams = Object.values(
+      teamTotals
+    )
       .sort(
-        (a, b) => b.points - a.points
+        (a, b) =>
+          b.points - a.points
       )
       .slice(0, 3);
 
-    // ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
     // PARTICIPATION
-    //
-    // Ranked by number of active people, rather than percentage.
-    // ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
 
     const teamActive: Record<
       string,
@@ -456,44 +837,73 @@ export async function GET() {
     > = {};
 
     for (const u of users) {
-      if (!u.team || !u.active) continue;
+      if (
+        !u.team ||
+        !u.active
+      ) {
+        continue;
+      }
 
       teamActive[u.team] =
         (teamActive[u.team] ?? 0) + 1;
     }
 
-    const participation = Object.entries(
-      teamRoster
-    )
-      .map(([team, size]) => {
-        const active =
-          teamActive[team] ?? 0;
+    const participation =
+      Object.entries(teamRoster)
+        .map(
+          ([team, size]) => {
+            const active =
+              teamActive[team] ?? 0;
 
-        return {
-          team,
-          active,
-          size,
-        };
-      })
-      .filter(
-        (t) => t.size > 0
-      )
-      .sort(
-        (a, b) =>
-          b.active - a.active ||
-          a.size - b.size
-      )
-      .slice(0, 3);
+            return {
+              team,
+              active,
+              size,
+            };
+          }
+        )
+        .filter(
+          (t) => t.size > 0
+        )
+        .sort(
+          (a, b) =>
+            b.active - a.active ||
+            a.size - b.size
+        )
+        .slice(0, 3);
 
-    // ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
     // RESPONSE
-    // ───────────────────────────────────────────────────────────
+    //
+    // pointsAchievedAt and streakAchievedAt are intentionally
+    // removed from the public response.
+    // They are only used internally for ranking.
+    // ─────────────────────────────────────────────────────────
+
+    const cleanUser = (
+      u: UserRow
+    ) => {
+      const {
+        pointsAchievedAt,
+        streakAchievedAt,
+        ...publicUser
+      } = u;
+
+      return publicUser;
+    };
 
     return NextResponse.json({
-      topFemales,
-      topMales,
-      topStreaks,
+      topFemales:
+        topFemales.map(cleanUser),
+
+      topMales:
+        topMales.map(cleanUser),
+
+      topStreaks:
+        topStreaks.map(cleanUser),
+
       teams,
+
       participation,
     });
   } catch (err: any) {

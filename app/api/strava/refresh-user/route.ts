@@ -8,6 +8,12 @@ export const dynamic = "force-dynamic";
 // Sync reaches back to the trial start; the season each activity
 // belongs to is decided per-activity by seasonForDate().
 const SYNC_START = SYNC_FLOOR;
+
+// A manual refresh only needs the last few days. Re-fetching the whole
+// season on every tap meant 2-3 Strava requests per person; with a
+// hundred people refreshing each morning that exhausts the app-wide
+// rate limit and everyone starts getting nothing back.
+const MANUAL_LOOKBACK_DAYS = 5;
 const SYNC_END: Date | null = null;
 
 export async function POST(req: Request) {
@@ -80,28 +86,56 @@ export async function POST(req: Request) {
     }
 
     // ── Pull activities ──────────────────────────────────────────────
-    const afterEpoch = Math.floor(SYNC_START.getTime() / 1000);
-    const allActivities: any[] = [];
-    let page = 1;
+    // Start from whichever is later: the season floor, or a few days
+    // back. One page, one request.
+    const lookbackStart = new Date(
+      Date.now() - MANUAL_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+    );
+    const fetchFrom =
+      lookbackStart > SYNC_START ? lookbackStart : SYNC_START;
+    const afterEpoch = Math.floor(fetchFrom.getTime() / 1000);
 
-    while (page <= 10) {
-      const res = await fetch(
-        `https://www.strava.com/api/v3/athlete/activities?after=${afterEpoch}&per_page=100&page=${page}`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
+    const res = await fetch(
+      `https://www.strava.com/api/v3/athlete/activities?after=${afterEpoch}&per_page=100&page=1`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+
+    if (!res.ok) {
+      const detail = await res.text();
+      const usage = res.headers.get("x-ratelimit-usage");
+      console.error(
+        `❌ Strava fetch failed for ${user_id}:`,
+        res.status,
+        `rate-limit usage ${usage}`,
+        detail.slice(0, 200)
       );
 
-      if (!res.ok) {
-        const detail = await res.text();
-        console.error(`❌ Strava activities fetch failed:`, res.status, detail);
-        break;
+      // Rate limiting used to be swallowed — the loop broke, zero
+      // activities came back, and the app reported "nothing new". Say
+      // what actually happened instead.
+      if (res.status === 429) {
+        return NextResponse.json(
+          {
+            error: "rate_limited",
+            message:
+              "Strava is busy right now. Your activity will appear automatically within a few minutes.",
+          },
+          { status: 429 }
+        );
       }
 
-      const batch = await res.json();
-      if (!Array.isArray(batch) || batch.length === 0) break;
-
-      allActivities.push(...batch);
-      page++;
+      return NextResponse.json(
+        {
+          error: "strava_error",
+          status: res.status,
+          message: "Couldn't reach Strava. Try again in a moment.",
+        },
+        { status: 502 }
+      );
     }
+
+    const batch = await res.json();
+    const allActivities: any[] = Array.isArray(batch) ? batch : [];
 
     // ── Filter: no manual entries, inside the sync window ────────────
     const filtered = allActivities.filter((a: any) => {
@@ -120,7 +154,7 @@ export async function POST(req: Request) {
     });
 
     console.log(
-      `🧭 ${user_id}: Strava returned ${allActivities.length}, ${filtered.length} within window since ${SYNC_START.toISOString()}`
+      `🧭 ${user_id}: Strava returned ${allActivities.length}, ${filtered.length} within window since ${fetchFrom.toISOString()}`
     );
 
     if (filtered.length === 0) {

@@ -142,7 +142,70 @@ export async function GET(req: Request) {
       team: string | null;
       gender: "F" | "M";
       points: number;
+      /** When this week's total was reached, for breaking ties */
+      reachedAt: number;
     };
+
+    /**
+     * The moment a person's weekly total was actually reached.
+     *
+     * A challenge is judged against a whole day's activity, so there's
+     * no timestamp stored anywhere that says when it completed. This
+     * finds it: the day's activities are replayed one at a time, and the
+     * first time a challenge flips to complete, the end of the activity
+     * that did it is taken as the moment.
+     *
+     * The value returned is the LATEST such moment in the week — the
+     * point at which their total stopped rising.
+     */
+    function reachedAtFor(activities: any[]): number {
+      if (!activities.length) return Number.MAX_SAFE_INTEGER;
+
+      const endOf = (a: any) =>
+        new Date(a.start_date).getTime() +
+        (Number(a.moving_time) || 0) * 1000;
+
+      let latest = 0;
+
+      for (const day of days) {
+        const dayActs = activities
+          .filter((a: any) => istDayKey(new Date(a.start_date)) === day)
+          .sort(
+            (a: any, b: any) =>
+              new Date(a.start_date).getTime() -
+              new Date(b.start_date).getTime()
+          );
+
+        if (!dayActs.length) continue;
+
+        // Everything from other days, so beat-avg still sees its history
+        const otherDays = activities.filter(
+          (a: any) => istDayKey(new Date(a.start_date)) !== day
+        );
+
+        const alreadyDone = new Set<string>();
+
+        for (let i = 1; i <= dayActs.length; i++) {
+          const upTo = [...otherDays, ...dayActs.slice(0, i)];
+          const { results, cleanSweep } = evaluateRange([day], upTo).days[0];
+
+          for (const r of results) {
+            if (r.completed && !alreadyDone.has(r.id)) {
+              alreadyDone.add(r.id);
+              latest = Math.max(latest, endOf(dayActs[i - 1]));
+            }
+          }
+
+          // The sweep bonus lands with the last challenge of the day
+          if (cleanSweep && !alreadyDone.has("__sweep")) {
+            alreadyDone.add("__sweep");
+            latest = Math.max(latest, endOf(dayActs[i - 1]));
+          }
+        }
+      }
+
+      return latest > 0 ? latest : Number.MAX_SAFE_INTEGER;
+    }
 
     const allEntries: BoardEntry[] = (rows ?? [])
       .map((p: any): BoardEntry => ({
@@ -151,9 +214,14 @@ export async function GET(req: Request) {
         team: p.team ?? null,
         gender: genderOf.get(p.user_id) ?? "M",
         points: evaluateRange(days, p.activities ?? []).total,
+        reachedAt: reachedAtFor(p.activities ?? []),
       }))
       .filter((p: BoardEntry) => p.points > 0)
-      .sort((a: BoardEntry, b: BoardEntry) => b.points - a.points);
+      // Level on points goes to whoever reached the total first.
+      .sort(
+        (a: BoardEntry, b: BoardEntry) =>
+          b.points - a.points || a.reachedAt - b.reachedAt
+      );
 
     // Regular runners play as normal but are ranked separately, and are
     // not eligible for the weekly champion slots.
