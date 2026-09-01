@@ -130,9 +130,85 @@ export function Activities() {
 
   const grouped = useMemo(() => groupByWeek(activities), [activities]);
 
+  // The refresh controls render here too. They used to sit below this
+  // early return, so an empty feed had no way to pull data in — exactly
+  // the moment you most want the button.
+  const refreshControls = (
+    <>
+    {/* ✅ Refresh button */}
+    <button
+      onClick={handleRefresh}
+      disabled={refreshing}
+      className="fixed bottom-28 right-5 w-14 h-14 rounded-full bg-tape flex items-center justify-center
+                 active:scale-95 transition-transform disabled:opacity-50 z-[45]
+                 shadow-lg shadow-black/40"
+      aria-label="Refresh activities"
+    >
+      <RefreshCcw
+        size={24}
+        strokeWidth={2.4}
+        className={refreshing ? "animate-spin text-ink-950" : "text-ink-950"}
+      />
+    </button>
+
+    {/* 🟧 Master refresh (Admin only) */}
+    {typeof window !== "undefined" &&
+      localStorage.getItem("user_id") === "U262861" && (
+        <button
+          onClick={async () => {
+            try {
+              setRefreshing(true);
+              const res = await fetch("/api/strava/refresh", { method: "POST" });
+              const data = await res.json();
+              if (res.ok) {
+                setToast("✅ All users refreshed successfully!");
+                await fetchActivities();
+              } else {
+                setToast(`❌ Failed: ${data.error || "Unknown error"}`);
+              }
+            } catch (err) {
+              console.error(err);
+              setToast("❌ Error during master refresh.");
+            } finally {
+              setRefreshing(false);
+              setTimeout(() => setToast(null), 4000);
+            }
+          }}
+          disabled={refreshing}
+          className="fixed bottom-[184px] right-5 w-10 h-10 rounded-full border border-ink-700
+                     bg-ink-900 flex items-center justify-center active:scale-95
+                     transition-transform disabled:opacity-50 z-[45]"
+          aria-label="Master refresh"
+        >
+          <RefreshCcw
+            size={17}
+            className={refreshing ? "animate-spin text-tape" : "text-tape"}
+          />
+        </button>
+      )}
+
+    {toast && (
+      <div className="fixed bottom-24 left-4 right-4 bg-ink-800 border border-ink-700 text-chalk px-4 py-2.5 rounded-xl text-sm text-center z-[46]">
+        {toast}
+      </div>
+    )}
+
+    </>
+  );
+
   if (weeksOrder.length === 0) {
     return (
-      <div className="p-6 text-center text-gray-200">No activities yet.</div>
+      <div className="relative min-h-[60vh]">
+        {refreshControls}
+        <div className="px-6 py-16 text-center">
+          <p className="font-display uppercase tracking-wide text-lg">
+            Nothing here yet
+          </p>
+          <p className="split text-chalk-dim mt-1.5">
+            Record an activity, then tap refresh to pull it in.
+          </p>
+        </div>
+      </div>
     );
   }
 
@@ -151,60 +227,7 @@ export function Activities() {
 
   return (
     <div className="p-4 space-y-6 text-white relative">
-      {/* ✅ Refresh button */}
-      <button
-        onClick={handleRefresh}
-        disabled={refreshing}
-        className="fixed bottom-40 right-6 w-14 h-14 rounded-full bg-blue-600 shadow-xl flex items-center justify-center 
-                   hover:bg-blue-500 active:scale-95 transition-all disabled:opacity-50 z-[9999] animate-bounce"
-        aria-label="Refresh activities"
-      >
-        <RefreshCcw
-          size={28}
-          className={refreshing ? "animate-spin text-white" : "text-white"}
-        />
-      </button>
-
-      {/* 🟧 Master refresh (Admin only) */}
-      {typeof window !== "undefined" &&
-        localStorage.getItem("user_id") === "U262861" && (
-          <button
-            onClick={async () => {
-              try {
-                setRefreshing(true);
-                const res = await fetch("/api/strava/refresh", { method: "POST" });
-                const data = await res.json();
-                if (res.ok) {
-                  setToast("✅ All users refreshed successfully!");
-                  await fetchActivities();
-                } else {
-                  setToast(`❌ Failed: ${data.error || "Unknown error"}`);
-                }
-              } catch (err) {
-                console.error(err);
-                setToast("❌ Error during master refresh.");
-              } finally {
-                setRefreshing(false);
-                setTimeout(() => setToast(null), 4000);
-              }
-            }}
-            disabled={refreshing}
-            className="fixed bottom-24 right-6 w-10 h-10 rounded-full bg-orange-500 shadow-lg flex items-center justify-center 
-                       hover:bg-orange-400 active:scale-95 transition-all disabled:opacity-50 z-[9999]"
-            aria-label="Master refresh"
-          >
-            <RefreshCcw
-              size={20}
-              className={refreshing ? "animate-spin text-white" : "text-white"}
-            />
-          </button>
-        )}
-
-      {toast && (
-        <div className="fixed bottom-10 right-6 bg-gray-900 text-white px-4 py-2 rounded-xl shadow-lg text-sm animate-fadeIn z-[10000]">
-          {toast}
-        </div>
-      )}
+      {refreshControls}
 
       {/* Weekly header + summary */}
       <div className="flex flex-col items-center gap-3">
