@@ -12,6 +12,7 @@ import PointsChampions from "@/components/PointsChampions";
 import Challenges from "@/components/Challenges";
 import You from "@/components/You";
 import TermsGate from "@/components/TermsGate";
+import PopupHost from "@/components/PopupHost";
 import BottomNav from "@/components/BottomNav";
 import { showChampions } from "@/lib/season";
 
@@ -72,7 +73,7 @@ function AppContent() {
             const t = await fetch("/api/terms").then((r) => r.json());
             setTermsAccepted(!!t.accepted);
           } catch {
-            // Don't lock people out if this check fails
+            // Never lock someone out because this check failed
             setTermsAccepted(true);
           }
 
@@ -99,6 +100,14 @@ function AppContent() {
 
               if (isRegisteredThisSeason(restored)) {
                 localStorage.setItem("user_id", restored.user_id);
+
+                try {
+                  const t = await fetch("/api/terms").then((r) => r.json());
+                  setTermsAccepted(!!t.accepted);
+                } catch {
+                  setTermsAccepted(true);
+                }
+
                 setLoading(false);
                 return;
               }
@@ -131,7 +140,7 @@ function AppContent() {
     );
   }
 
-  // Guests aren't recording anything, so the terms don't apply to them.
+  // Guests record nothing, so the terms don't apply to them.
   if (!isGuest && termsAccepted === false) {
     return <TermsGate onAccepted={() => setTermsAccepted(true)} />;
   }
@@ -184,6 +193,7 @@ function AppContent() {
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
+      <PopupHost />
       {/* The layout is designed for a phone. Without a max width the
             cards stretch across a desktop monitor and read as broken. */}
         <div className="flex-1 overflow-y-auto pb-32">
