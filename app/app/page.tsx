@@ -11,6 +11,7 @@ import StatsPage from "./stats/page";
 import PointsChampions from "@/components/PointsChampions";
 import Challenges from "@/components/Challenges";
 import You from "@/components/You";
+import TermsGate from "@/components/TermsGate";
 import BottomNav from "@/components/BottomNav";
 import { showChampions } from "@/lib/season";
 
@@ -42,6 +43,7 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>("you");
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState<boolean | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -64,6 +66,16 @@ function AppContent() {
 
         if (isRegisteredThisSeason(profile)) {
           localStorage.setItem("user_id", profile.user_id);
+
+          // Participation terms must be accepted before the app opens
+          try {
+            const t = await fetch("/api/terms").then((r) => r.json());
+            setTermsAccepted(!!t.accepted);
+          } catch {
+            // Don't lock people out if this check fails
+            setTermsAccepted(true);
+          }
+
           setLoading(false);
           return;
         }
@@ -117,6 +129,11 @@ function AppContent() {
         <p className="eyebrow text-[10px]">Checking your bib</p>
       </div>
     );
+  }
+
+  // Guests aren't recording anything, so the terms don't apply to them.
+  if (!isGuest && termsAccepted === false) {
+    return <TermsGate onAccepted={() => setTermsAccepted(true)} />;
   }
 
   const tabs = (
