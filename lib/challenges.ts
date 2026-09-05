@@ -9,7 +9,7 @@
 // Everything is verified automatically from synced Strava data, so no
 // moderator has to tick anything off.
 
-import { SEASON } from "./season";
+import { SEASON, overlapsNightHours } from "./season";
 import { istDayKey } from "./streak";
 
 export type Difficulty = "easy" | "medium" | "hard";
@@ -466,9 +466,16 @@ function progressFor(
   }
 }
 
-/** An activity counts only if valid and outside office hours. */
+/** An activity counts only if valid and outside the night window. */
 function countsToday(a: DayActivity): boolean {
-  return a.is_valid !== false;
+  if (a.is_valid === false) return false;
+  // Excluded for safety, and not lifted by a leave day
+  if (
+    overlapsNightHours(new Date(a.start_date), Number(a.moving_time) || 0)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export type DayEvaluation = {

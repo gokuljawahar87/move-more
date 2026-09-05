@@ -11,7 +11,12 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { SEASON, activeSeason, displayWindowStart } from "@/lib/season";
+import {
+  SEASON,
+  activeSeason,
+  displayWindowStart,
+  overlapsNightHours,
+} from "@/lib/season";
 import { overlapsOfficeHours } from "@/lib/streak";
 import { DailyPoints, disciplineOf } from "@/lib/points";
 import { earnedMilestones } from "@/lib/milestones";
@@ -98,6 +103,8 @@ async function scanForNewMilestones() {
     const counted = acts.filter((a: any) => {
       if (!a?.is_valid || !a.start_date) return false;
       const start = new Date(a.start_date);
+      // Night activity is excluded regardless of leave status
+      if (overlapsNightHours(start, a.moving_time || 0)) return false;
       if (a.on_leave_day) return true;
       return !overlapsOfficeHours(start, a.moving_time || 0);
     });
@@ -194,6 +201,51 @@ export async function GET() {
           title: liveAnn.title,
           body: liveAnn.body,
         },
+      });
+    }
+
+    // ── 2. Weekly champions ──────────────────────────────────────
+    // One popup per WEEK, not per winner: a single card showing both
+    // boards side by side. Two cards in a row read as two separate
+    // events rather than one week's result.
+    const { data: champs } = await supabaseAdmin
+      .from("weekly_champions")
+      .select("week, gender, name, team, points")
+      .eq("season", SEASON.number)
+      .order("week", { ascending: true });
+
+    const byWeek = new Map<number, any[]>();
+    for (const c of (champs ?? []) as any[]) {
+      byWeek.set(c.week, [...(byWeek.get(c.week) ?? []), c]);
+    }
+
+    const unseenWeek = [...byWeek.keys()]
+      .sort((a, b) => a - b)
+      .find((w) => !seen.has(`champion:week-${w}`));
+
+    if (unseenWeek !== undefined) {
+      const rows = byWeek.get(unseenWeek) ?? [];
+      const pick = (g: string) =>
+        rows
+          .filter((c) => c.gender === g)
+          .map((c) => ({
+            name: c.name ?? "Champion",
+            team: c.team ?? null,
+            points: c.points ?? 0,
+          }));
+
+      return NextResponse.json({
+        popup: {
+          kind: "champion",
+          key: `week-${unseenWeek}`,
+          kicker: `Week ${unseenWeek} champions`,
+          title: "Weekly challenge",
+          body: "",
+          week: unseenWeek,
+          women: pick("F"),
+          men: pick("M"),
+        },
+        queue: [],
       });
     }
 

@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 
 type Popup = {
-  kind: "announcement" | "milestone";
+  kind: "announcement" | "milestone" | "champion";
   key: string;
   kicker: string;
   title: string;
@@ -25,6 +25,16 @@ type Popup = {
   /** walk | run | cycle | streak | points */
   metric?: string;
   threshold?: number;
+  /** Champion popups only */
+  week?: number;
+  women?: ChampionEntry[];
+  men?: ChampionEntry[];
+};
+
+type ChampionEntry = {
+  name: string;
+  team: string | null;
+  points: number;
 };
 
 /**
@@ -84,6 +94,7 @@ export default function PopupHost() {
 
   const isMilestone = popup.kind === "milestone";
   const badge = BADGES[popup.metric ?? "points"] ?? BADGES.points;
+  const isChampion = popup.kind === "champion";
 
   async function dismiss() {
     const current = popup!;
@@ -137,77 +148,106 @@ export default function PopupHost() {
           <X size={16} />
         </button>
 
-        {isMilestone ? (
-            /* A medallion: coloured ring, discipline icon, and the
-               number itself as the centrepiece. */
-            <div className="relative w-[104px] h-[104px] mx-auto">
+        {isChampion ? (
+            <>
               <div
-                className="absolute inset-0 rounded-full"
-                style={{ backgroundColor: badge.colour, opacity: 0.14 }}
-              />
-              <div
-                className="absolute inset-[6px] rounded-full border-2 flex flex-col items-center justify-center"
-                style={{ borderColor: badge.colour }}
+                className="w-14 h-14 rounded-full mx-auto flex items-center justify-center"
+                style={{ backgroundColor: "var(--gold)" }}
               >
-                <badge.Icon
-                  size={17}
-                  style={{ color: badge.colour }}
-                  strokeWidth={2.2}
-                />
-                <span
-                  className="readout text-[30px] leading-none mt-0.5"
-                  style={{ color: badge.colour }}
-                >
-                  {popup.threshold || ""}
-                </span>
-                <span className="eyebrow text-[7px] mt-0.5">
-                  {badge.unit}
-                </span>
+                <Trophy size={26} className="text-ink-950" strokeWidth={2.2} />
               </div>
-            </div>
+
+              <p className="eyebrow text-[9px] mt-4">{popup.kicker}</p>
+
+              <h2 className="font-display font-700 uppercase leading-tight text-[24px] mt-1.5">
+                {popup.title}
+              </h2>
+
+              {/* Both boards on one card. The week has one result, not
+                  two, so it shouldn't arrive as two separate popups. */}
+              <div className="grid grid-cols-2 gap-3 mt-5 text-left">
+                <ChampionColumn label="Women" list={popup.women ?? []} />
+                <ChampionColumn label="Men" list={popup.men ?? []} />
+              </div>
+            </>
           ) : (
-            <div
-              className="w-14 h-14 rounded-full mx-auto flex items-center justify-center"
-              style={{ backgroundColor: "rgba(255,201,60,0.14)" }}
-            >
-              <Megaphone size={24} className="text-tape" strokeWidth={2.2} />
-            </div>
+            <>
+              {isMilestone ? (
+                /* A medallion: coloured ring, discipline icon, and the
+                   number itself as the centrepiece. */
+                <div className="relative w-[104px] h-[104px] mx-auto">
+                  <div
+                    className="absolute inset-0 rounded-full"
+                    style={{ backgroundColor: badge.colour, opacity: 0.14 }}
+                  />
+                  <div
+                    className="absolute inset-[6px] rounded-full border-2 flex flex-col items-center justify-center"
+                    style={{ borderColor: badge.colour }}
+                  >
+                    <badge.Icon
+                      size={17}
+                      style={{ color: badge.colour }}
+                      strokeWidth={2.2}
+                    />
+                    <span
+                      className="readout text-[30px] leading-none mt-0.5"
+                      style={{ color: badge.colour }}
+                    >
+                      {popup.threshold || ""}
+                    </span>
+                    <span className="eyebrow text-[7px] mt-0.5">
+                      {badge.unit}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="w-14 h-14 rounded-full mx-auto flex items-center justify-center"
+                  style={{ backgroundColor: "rgba(255,201,60,0.14)" }}
+                >
+                  <Megaphone size={24} className="text-tape" strokeWidth={2.2} />
+                </div>
+              )}
+
+              <p className="eyebrow text-[9px] mt-4">{popup.kicker}</p>
+
+              {popup.who ? (
+                <>
+                  <h2 className="font-display font-700 uppercase leading-tight text-[26px] mt-1.5">
+                    {popup.who}
+                  </h2>
+                  <p
+                    className="font-display font-600 uppercase tracking-wide text-[15px] mt-1"
+                    style={{ color: badge.colour }}
+                  >
+                    {popup.title}
+                  </p>
+                </>
+              ) : (
+                <h2 className="font-display font-700 uppercase leading-tight text-[26px] mt-1.5">
+                  {popup.title}
+                </h2>
+              )}
+
+              <p className="text-sm text-chalk-dim leading-relaxed mt-3">
+                {popup.body}
+              </p>
+            </>
           )}
 
-          <p className="eyebrow text-[9px] mt-4">{popup.kicker}</p>
-
-        {/* Somebody else's achievement leads with their name — the
-            milestone is the subtitle. Your own leads with the
-            milestone. */}
-        {popup.who ? (
-          <>
-            <h2 className="font-display font-700 uppercase leading-tight text-[26px] mt-1.5">
-              {popup.who}
-            </h2>
-            <p
-              className="font-display font-600 uppercase tracking-wide text-[15px] mt-1"
-              style={{ color: badge.colour }}
-            >
-              {popup.title}
-            </p>
-          </>
-        ) : (
-          <h2 className="font-display font-700 uppercase leading-tight text-[26px] mt-1.5">
-            {popup.title}
-          </h2>
-        )}
-
-        <p className="text-sm text-chalk-dim leading-relaxed mt-3">
-          {popup.body}
-        </p>
-
-        <button
-          onClick={dismiss}
-          className="w-full mt-6 bg-tape hover:bg-tape-deep text-ink-950 py-3 rounded-lg
-                     font-display font-700 uppercase tracking-[0.1em] text-[14px]
-                     transition-colors"
-        >
-            {isMilestone ? (popup.who ? "Nice one" : "Thanks") : "Got it"}
+          <button
+            onClick={dismiss}
+            className="w-full mt-6 bg-tape hover:bg-tape-deep text-ink-950 py-3 rounded-lg
+                       font-display font-700 uppercase tracking-[0.1em] text-[14px]
+                       transition-colors"
+          >
+            {isChampion
+              ? "Well played"
+              : isMilestone
+              ? popup.who
+                ? "Nice one"
+                : "Thanks"
+              : "Got it"}
           </button>
 
           {/* So people know the next card is a different person, not a
@@ -220,5 +260,42 @@ export default function PopupHost() {
         </div>
       </div>
     </>
+  );
+}
+
+/** One board's winners inside the weekly champion card. */
+function ChampionColumn({
+  label,
+  list,
+}: {
+  label: string;
+  list: ChampionEntry[];
+}) {
+  return (
+    <div>
+      <p className="eyebrow text-[8px] pb-1.5 mb-1.5 border-b border-ink-800">
+        {label}
+      </p>
+
+      {list.length > 0 ? (
+        <div className="space-y-1.5">
+          {list.map((c) => (
+            <div key={c.name}>
+              <p className="font-display font-600 uppercase text-[12px] leading-tight">
+                {c.name}
+              </p>
+              <p className="split text-chalk-dim text-[9px]">
+                {c.points} pts
+              </p>
+            </div>
+          ))}
+          {list.length > 1 && (
+            <p className="split text-tape text-[9px]">Joint winners</p>
+          )}
+        </div>
+      ) : (
+        <p className="split text-chalk-dim text-[10px]">Not settled</p>
+      )}
+    </div>
   );
 }

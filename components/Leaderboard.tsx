@@ -1,26 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Check } from "lucide-react";
 import { teamLogo, teamName } from "@/lib/teams";
 
 type LeaderboardEntry = {
   name?: string;
   team?: string;
   points?: number;
-  streak?: number;
+  /** True when this person has taken the full daily maximum every day */
+  perfect?: boolean;
   active?: number;
   size?: number;
   rate?: number;
 };
 
 type LeaderboardData = {
-  topScorers?: LeaderboardEntry[];
   topFemales?: LeaderboardEntry[];
   topMales?: LeaderboardEntry[];
-  topStreaks?: LeaderboardEntry[];
   teams?: LeaderboardEntry[];
   participation?: LeaderboardEntry[];
+  /** Day of the season, 1-indexed */
+  dayNumber?: number;
+  /** dayNumber × the daily cap — the score a clean sheet reaches */
+  maxPossible?: number;
 };
 
 export default function Leaderboard() {
@@ -66,29 +69,20 @@ export default function Leaderboard() {
         accent="var(--tape)"
         isTeam
       />
-      <Section
+      {/* Everyone on the maximum, not a top three. Once fifteen people
+          were all taking 100 a day, showing three of them made the
+          other twelve invisible. */}
+      <Perfect
         label="Women's Podium"
-        note="by points"
+        note="Every point, every day"
         list={data.topFemales || []}
-        metric="points"
-        unit="pts"
-        accent="var(--tape)"
+        maxPossible={data.maxPossible ?? 0}
       />
-      <Section
+      <Perfect
         label="Men's Podium"
-        note="by points"
+        note="Not a single point dropped"
         list={data.topMales || []}
-        metric="points"
-        unit="pts"
-        accent="var(--tape)"
-      />
-      <Section
-        label="Longest Streaks"
-        note="consecutive days"
-        list={data.topStreaks || []}
-        metric="streak"
-        unit="days"
-        accent="var(--run)"
+        maxPossible={data.maxPossible ?? 0}
       />
 
       {/* Participation is a SHARE of each team, not a headcount —
@@ -112,7 +106,7 @@ function Section({
   label: string;
   note: string;
   list: LeaderboardEntry[];
-  metric: "points" | "streak";
+  metric: "points";
   unit: string;
   accent: string;
   isTeam?: boolean;
@@ -177,9 +171,7 @@ function Section({
                     className="readout text-2xl"
                     style={{ color: accent }}
                   >
-                    {metric === "streak"
-                      ? Number(item[metric] ?? 0)
-                      : Number(item[metric] ?? 0).toFixed(1)}
+                    {Number(item[metric] ?? 0).toFixed(1)}
                   </span>
                   <span className="eyebrow text-[9px] ml-1">{unit}</span>
                 </div>
@@ -204,7 +196,7 @@ function Participation({ list }: { list: LeaderboardEntry[] }) {
     <section>
       <div className="flex items-baseline justify-between mb-2.5 pb-2 border-b border-ink-800">
         <h2 className="font-display font-700 uppercase tracking-[0.08em] text-xl">
-          Top Active Team
+          Turnout
         </h2>
         <span className="split text-chalk-dim">members moving</span>
       </div>
@@ -280,6 +272,99 @@ function Participation({ list }: { list: LeaderboardEntry[] }) {
       ) : (
         <div className="bib px-4 pt-5 pb-4 text-center">
           <p className="split text-chalk-dim">Nobody moving yet.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Everyone who has taken the full daily maximum, every day so far.
+ *
+ * Deliberately not capped at three: the whole point is that these
+ * people are level, and cutting the list would hide most of them.
+ */
+function Perfect({
+  label,
+  note,
+  list,
+  maxPossible,
+}: {
+  label: string;
+  note: string;
+  list: LeaderboardEntry[];
+  maxPossible: number;
+}) {
+  return (
+    <section>
+      <div className="flex items-baseline justify-between gap-3 mb-2.5 pb-2 border-b border-ink-800">
+        <h2 className="font-display font-700 uppercase tracking-[0.08em] text-xl">
+          {label}
+        </h2>
+        <span className="split text-chalk-dim text-right leading-tight">
+          {list.some((p) => p.perfect !== false) ? note : "Leading so far"}
+        </span>
+      </div>
+
+      {list.length > 0 ? (
+        <div className="space-y-2">
+          {list.map((p, i) => {
+            // A tick means a clean sheet. Anyone here to make the
+            // numbers up gets a rank instead — the same card, but it
+            // doesn't claim something that isn't true.
+            const perfect = p.perfect !== false;
+
+            return (
+            <div
+              key={p.name ?? i}
+              className="bib flex items-center gap-3 px-3.5 pt-4 pb-3 animate-bib-in"
+              style={{
+                animationDelay: `${i * 50}ms`,
+                boxShadow: perfect
+                  ? "inset 4px 0 0 var(--walk)"
+                  : "inset 4px 0 0 var(--ink-700)",
+              }}
+            >
+              {perfect ? (
+                <Check
+                  size={16}
+                  className="text-walk shrink-0"
+                  strokeWidth={3}
+                />
+              ) : (
+                <span className="bib-number text-[20px] w-4 text-center shrink-0 text-chalk-dim">
+                  {i + 1}
+                </span>
+              )}
+
+              <div className="min-w-0 flex-1">
+                <div className="font-display font-600 uppercase tracking-wide text-[17px] leading-tight truncate">
+                  {p.name}
+                </div>
+                <div className="split text-chalk-dim truncate mt-0.5">
+                  {teamName(p.team)}
+                </div>
+              </div>
+
+              <div className="text-right shrink-0">
+                <span
+                  className="readout text-lg"
+                  style={{ color: perfect ? "var(--walk)" : "var(--tape)" }}
+                >
+                  {Math.round(Number(p.points ?? 0))}
+                </span>
+                <span className="split text-chalk-dim">/{maxPossible}</span>
+              </div>
+            </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="bib px-4 pt-5 pb-4 text-center">
+          <p className="split text-chalk-dim">
+            Nobody on a clean sheet yet. It only takes one full day to
+            start.
+          </p>
         </div>
       )}
     </section>

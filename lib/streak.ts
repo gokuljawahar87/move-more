@@ -12,7 +12,7 @@
 // IST is 20:30 UTC the PREVIOUS day. Keying days off UTC would put those
 // two in different buckets and silently break streaks overnight.
 
-import { SEASON } from "./season";
+import { SEASON, overlapsNightHours } from "./season";
 
 export const STREAK_MIN_MOVING_SECONDS = 30 * 60;
 
@@ -116,6 +116,11 @@ export function qualifiesForStreak(a: StreakActivity): boolean {
   if (!STREAK_TYPES.has(kind)) return false;
 
   const start = new Date(a.start_date);
+
+  // Night activity never counts, leave day or not. A streak is exactly
+  // the kind of thing that would tempt someone out at 2am.
+  if (overlapsNightHours(start, moving)) return false;
+
   if (!a.on_leave_day && overlapsOfficeHours(start, moving)) return false;
 
   return true;

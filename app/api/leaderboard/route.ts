@@ -2,8 +2,8 @@
 
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { SEASON, activeSeason, SYNC_FLOOR } from "@/lib/season";
-import { DailyPoints, disciplineOf } from "@/lib/points";
+import { SEASON, activeSeason, SYNC_FLOOR, overlapsNightHours } from "@/lib/season";
+import { DailyPoints, disciplineOf, DAILY_POINT_CAP } from "@/lib/points";
 import {
   computeStreaks,
   qualifiesForStreak,
@@ -480,7 +480,8 @@ export async function GET() {
       return NextResponse.json({
         topFemales: [],
         topMales: [],
-        topStreaks: [],
+        dayNumber: 1,
+        maxPossible: DAILY_POINT_CAP,
         teams: [],
         participation: [],
       });
@@ -585,6 +586,18 @@ export async function GET() {
         // ────────────────────────────────────────────────────
         // OFFICE-HOURS EXCLUSION
         // ────────────────────────────────────────────────────
+
+        // Night hours are excluded for safety. Unlike office hours, a
+        // declared leave day does NOT lift this — nobody should be
+        // running unlit roads at two in the morning for a streak.
+        if (
+          overlapsNightHours(
+            startUTC,
+            a.moving_time || 0
+          )
+        ) {
+          continue;
+        }
 
         if (
           !a.on_leave_day &&
@@ -728,69 +741,78 @@ export async function GET() {
     };
 
     // ─────────────────────────────────────────────────────────
-    // FEMALE PODIUM
-    // ─────────────────────────────────────────────────────────
-
-    const topFemales = scored
-      .filter((u) =>
-        u.gender.startsWith("F")
-      )
-      .sort(byPoints)
-      .slice(0, 3);
-
-    // ─────────────────────────────────────────────────────────
-    // MALE PODIUM
-    // ─────────────────────────────────────────────────────────
-
-    const topMales = scored
-      .filter(
-        (u) =>
-          !u.gender.startsWith("F")
-      )
-      .sort(byPoints)
-      .slice(0, 3);
-
-    // ─────────────────────────────────────────────────────────
-    // STREAK SORT
+    // PERFECT SCORERS
     //
-    // 1. Longer streak first
-    // 2. If tied → earlier achievement first
-    // 3. If still tied → points
-    // 4. If still tied → user_id
+    // Showing only a top three was misleading once fifteen people were
+    // taking the daily maximum — they were all level, and twelve of
+    // them were invisible. The podiums now list everyone who has taken
+    // the full 100 every single day, however many that is.
     // ─────────────────────────────────────────────────────────
 
-    const topStreaks = users
-      .filter(
-        (u) => u.streak > 0
-      )
-      .sort((a, b) => {
-        if (
-          b.streak !== a.streak
-        ) {
-          return b.streak - a.streak;
-        }
+    // Days elapsed in the season, counted in IST and inclusive of today
+    const istToday = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
 
-        if (
-          a.streakAchievedAt !==
-          b.streakAchievedAt
-        ) {
-          return (
-            a.streakAchievedAt -
-            b.streakAchievedAt
-          );
-        }
+    const startKey = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(SEASON.start);
 
-        if (
-          b.points !== a.points
-        ) {
-          return b.points - a.points;
-        }
+    const dayNumber = Math.max(
+      1,
+      Math.round(
+        (Date.parse(`${istToday}T00:00:00Z`) -
+          Date.parse(`${startKey}T00:00:00Z`)) /
+          86_400_000
+      ) + 1
+    );
 
-        return a.user_id.localeCompare(
-          b.user_id
-        );
-      })
-      .slice(0, 3);
+    const maxPossible = dayNumber * DAILY_POINT_CAP;
+
+    // Rounded, because points are floats and someone on exactly the
+    // cap can land a hair under it.
+    const isPerfect = (u: any) =>
+      Math.round(u.points) >= maxPossible;
+
+    /**
+     * Everyone on a clean sheet — and if that's fewer than three, the
+     * next highest scorers fill the gap.
+     *
+     * An empty podium reads as a broken page rather than "nobody has
+     * managed it yet", so the board always carries at least three
+     * names. The top-up entries are flagged so the app can show them
+     * as ranked rather than perfect.
+     */
+    const MIN_PODIUM = 3;
+
+    const buildPodium = (isFemale: boolean) => {
+      const pool = scored
+        .filter((u) => u.gender.startsWith("F") === isFemale)
+        .sort(byPoints);
+
+      const perfect = pool.filter(isPerfect).map((u) => ({
+        ...u,
+        perfect: true,
+      }));
+
+      if (perfect.length >= MIN_PODIUM) return perfect;
+
+      const fill = pool
+        .filter((u) => !isPerfect(u))
+        .slice(0, MIN_PODIUM - perfect.length)
+        .map((u) => ({ ...u, perfect: false }));
+
+      return [...perfect, ...fill];
+    };
+
+    const perfectFemales = buildPodium(true);
+    const perfectMales = buildPodium(false);
 
     // ─────────────────────────────────────────────────────────
     // TEAM POINTS
@@ -893,14 +915,19 @@ export async function GET() {
     };
 
     return NextResponse.json({
-      topFemales:
-        topFemales.map(cleanUser),
+      // Everyone at the maximum, not a top three
+      topFemales: perfectFemales.map((u) => ({
+        ...cleanUser(u),
+        perfect: u.perfect,
+      })),
+      topMales: perfectMales.map((u) => ({
+        ...cleanUser(u),
+        perfect: u.perfect,
+      })),
 
-      topMales:
-        topMales.map(cleanUser),
-
-      topStreaks:
-        topStreaks.map(cleanUser),
+      // So the app can show "500 / 500" rather than a bare total
+      dayNumber,
+      maxPossible,
 
       teams,
 

@@ -106,6 +106,12 @@ export default function Challenges() {
   const pacesetters = data.pacesetters ?? [];
   const anyScores = board.length > 0 || pacesetters.length > 0;
 
+  // Everyone on the top score shares first place; the next two distinct
+  // finishers fill the places below.
+  const topScore = board[0]?.points ?? 0;
+  const leaders = board.filter((p: any) => p.points === topScore);
+  const chasers = board.slice(leaders.length, leaders.length + 2);
+
   return (
     <div className="px-4 py-5 space-y-5">
       {/* ── Week navigator + progress ─────────────────────────── */}
@@ -161,53 +167,67 @@ export default function Challenges() {
           weekly winners into women and men. */}
       {board.length > 0 ? (
         <div className="space-y-2">
-          <div className="bib bib-1 flex items-center gap-3 px-3.5 pt-4 pb-3">
-            <span className="bib-number w-8 text-center" style={{ color: "var(--gold)" }}>
-              1
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="font-display font-600 uppercase tracking-wide text-[16px] truncate">
-                {board[0].name}
-              </p>
-              <p className="split text-chalk-dim truncate">
-                {teamName(board[0].team)}
-              </p>
+          {/* Everyone level at the top shares first place. Showing one
+              of them and burying the rest in the full list made a tie
+              look like a win. */}
+          {leaders.map((p: any) => (
+            <div
+              key={p.user_id}
+              className="bib bib-1 flex items-center gap-3 px-3.5 pt-4 pb-3"
+            >
+              <span
+                className="bib-number w-8 text-center"
+                style={{ color: "var(--gold)" }}
+              >
+                1
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-display font-600 uppercase tracking-wide text-[16px] truncate">
+                  {p.name}
+                </p>
+                <p className="split text-chalk-dim truncate">
+                  {teamName(p.team)}
+                </p>
+              </div>
+              <span className="readout text-xl text-tape shrink-0">
+                {p.points}
+              </span>
             </div>
-            <span className="readout text-xl text-tape shrink-0">
-              {board[0].points}
-            </span>
-          </div>
+          ))}
 
-          <div className="grid grid-cols-2 gap-2">
-            {[1, 2].map((i) =>
-              board[i] ? (
+          {leaders.length > 1 && (
+            <p className="split text-chalk-dim text-center py-0.5">
+              {leaders.length} level at the top
+            </p>
+          )}
+
+          {chasers.length > 0 && (
+            <div className="grid grid-cols-2 gap-2">
+              {chasers.map((p: any, i: number) => (
                 <div
-                  key={i}
-                  className={`bib bib-${i + 1} flex items-center gap-2.5 px-3 pt-4 pb-3`}
+                  key={p.user_id}
+                  className={`bib bib-${i + 2} flex items-center gap-2.5 px-3 pt-4 pb-3`}
                 >
                   <span
                     className="bib-number text-2xl w-5 text-center"
-                    style={{ color: i === 1 ? "var(--silver)" : "var(--bronze)" }}
+                    style={{
+                      color: i === 0 ? "var(--silver)" : "var(--bronze)",
+                    }}
                   >
-                    {i + 1}
+                    {leaders.length + i + 1}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="font-display font-600 uppercase text-[13px] truncate">
-                      {board[i].name}
+                      {p.name}
                     </p>
                     <p className="split text-chalk-dim text-[10px]">
-                      {board[i].points} pts
+                      {p.points} pts
                     </p>
                   </div>
                 </div>
-              ) : (
-                <div key={i} className="bib px-3 pt-4 pb-3">
-                  <p className="split text-chalk-dim">—</p>
-                </div>
-              )
-            )}
-          </div>
-
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <div className="bib px-4 pt-5 pb-4 text-center">
@@ -447,13 +467,21 @@ export default function Challenges() {
                     {upcoming && <Lock size={9} className="text-chalk-dim" />}
                   </div>
 
-                  {slot.name ? (
+                  {slot.names?.length ? (
                     <>
-                      <p className="font-display font-600 uppercase text-[13px] leading-tight mt-1.5 truncate">
-                        {slot.name}
-                      </p>
-                      <p className="split text-chalk-dim text-[10px]">
+                      {/* Joint champions share one card. A tie is a
+                          shared win, not two separate ones. */}
+                      {slot.names.map((n: string) => (
+                        <p
+                          key={n}
+                          className="font-display font-600 uppercase text-[13px] leading-tight mt-1.5 truncate"
+                        >
+                          {n}
+                        </p>
+                      ))}
+                      <p className="split text-chalk-dim text-[10px] mt-0.5">
                         {slot.points} pts
+                        {slot.names.length > 1 && ` · ${slot.names.length} joint`}
                       </p>
                     </>
                   ) : (

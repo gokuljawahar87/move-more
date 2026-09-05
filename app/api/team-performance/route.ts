@@ -1,7 +1,7 @@
 // app/api/team-performance/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { SEASON, activeSeason, SYNC_FLOOR, displayWindowStart } from "@/lib/season";
+import { SEASON, activeSeason, SYNC_FLOOR, displayWindowStart, overlapsNightHours } from "@/lib/season";
 import { DailyPoints, disciplineOf } from "@/lib/points";
 
 // Challenge start (1 Oct 2025, 00:00 IST)
@@ -143,7 +143,10 @@ export async function GET(request: Request) {
           if (startUTC >= CHALLENGE_END) continue;
 
           // A declared leave day lifts the office-hours exclusion.
-          if (!a.on_leave_day && overlapsWorkingHours(startUTC, a.moving_time || 0)) continue;
+          // Night hours are excluded for safety, and a leave day does
+        // not lift them the way it lifts office hours.
+        if (overlapsNightHours(startUTC, a.moving_time || 0)) continue;
+        if (!a.on_leave_day && overlapsWorkingHours(startUTC, a.moving_time || 0)) continue;
 
           acc.add(
             a.start_date,

@@ -159,3 +159,54 @@ function formatGap(ms: number): string {
 export function displayWindowStart(now: Date = new Date()): Date {
   return now.getTime() >= SEASON.start.getTime() ? SEASON.start : SEASON.trialStart;
 }
+
+// ═══════════════════════════════════════════════════════════════
+// NIGHT-HOURS EXCLUSION
+//
+// Activity overlapping 23:00–03:30 IST doesn't count and isn't shown.
+// This is a SAFETY rule, not a scheduling one: unlike office hours, a
+// declared leave day does not lift it. Nobody should feel pushed into
+// running on unlit roads at two in the morning to hold a streak.
+// ═══════════════════════════════════════════════════════════════
+
+export const NIGHT_START_MINUTE = 23 * 60; // 23:00
+export const NIGHT_END_MINUTE = 3 * 60 + 30; // 03:30
+
+/** Minutes past midnight, IST. */
+function istMinutes(date: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const get = (t: string) => parts.find((p) => p.type === t)!.value;
+  return (parseInt(get("hour"), 10) % 24) * 60 + parseInt(get("minute"), 10);
+}
+
+/**
+ * Does this activity touch the night window at any point?
+ *
+ * The window wraps midnight, so it's treated as two segments —
+ * 23:00–24:00 and 00:00–03:30 — and the activity is checked against
+ * both, including the case where the activity itself runs past
+ * midnight.
+ */
+export function overlapsNightHours(
+  startUTC: Date,
+  durationSec: number
+): boolean {
+  const start = istMinutes(startUTC);
+  const end = start + Math.max(0, Math.round(durationSec / 60));
+
+  const segments: [number, number][] = [
+    [NIGHT_START_MINUTE, 24 * 60], // 23:00 → midnight
+    [0, NIGHT_END_MINUTE], // midnight → 03:30
+    // The same two segments on the following day, for an activity that
+    // starts before 23:00 and runs into the night
+    [NIGHT_START_MINUTE + 24 * 60, 48 * 60],
+    [24 * 60, NIGHT_END_MINUTE + 24 * 60],
+  ];
+
+  return segments.some(([a, b]) => start < b && end > a);
+}

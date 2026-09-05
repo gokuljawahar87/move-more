@@ -32,6 +32,123 @@ export const dynamic = "force-dynamic";
  */
 
 
+/**
+ * Settle any finished week that hasn't been recorded yet.
+ *
+ * Runs on read and is idempotent — the unique constraint on
+ * (season, week, gender, user_id) means a repeat insert updates rather
+ * than duplicates, and the existence check below means it normally
+ * does nothing at all.
+ *
+ * There's a deliberate delay: a week isn't settled until 8am Monday
+ * IST. Sunday evening's activities often don't reach us until the
+ * 7:30am sync, and crowning someone at one minute past midnight would
+ * sometimes crown the wrong person.
+ *
+ * That leaves only half an hour of margin after the morning sync. If
+ * the cron is ever late or fails, a week could settle on incomplete
+ * data — so if the sync becomes unreliable, widen this again.
+ */
+const SETTLE_DELAY_HOURS = 8;
+
+async function settleFinishedWeeks(currentWeek: number) {
+  if (currentWeek <= 1) return;
+
+  const { data: already } = await supabaseAdmin
+    .from("weekly_champions")
+    .select("week")
+    .eq("season", SEASON.number);
+
+  const settled = new Set((already ?? []).map((r: any) => r.week));
+
+  for (let w = 1; w < currentWeek; w++) {
+    if (settled.has(w)) continue;
+
+    const days = weekDays(w);
+    if (!days.length) continue;
+
+    // Has the grace period passed?
+    const endedAt = new Date(
+      `${days[days.length - 1]}T23:59:59+05:30`
+    ).getTime();
+    if (Date.now() < endedAt + SETTLE_DELAY_HOURS * 60 * 60 * 1000) continue;
+
+    const from = new Date(`${days[0]}T00:00:00+05:30`);
+    from.setDate(from.getDate() - 7); // history for Better Than Before
+    const to = new Date(`${days[days.length - 1]}T23:59:59+05:30`);
+
+    const { data: rows } = await supabaseAdmin
+      .from("profiles")
+      .select(
+        `
+        user_id, first_name, last_name, team,
+        activities (
+          type, derived_type, distance, moving_time,
+          start_date, is_valid, on_leave_day
+        )
+      `
+      )
+      .eq("season", SEASON.number)
+      .gte("activities.start_date", from.toISOString())
+      .lte("activities.start_date", to.toISOString());
+
+    if (!rows?.length) continue;
+
+    const { data: genderRows } = await supabaseAdmin
+      .from("employee_master")
+      .select("user_id, gender");
+
+    const genderOf = new Map<string, "F" | "M">();
+    for (const g of genderRows ?? []) {
+      const v = String(g.gender ?? "").trim().toUpperCase();
+      genderOf.set(g.user_id, v.startsWith("F") ? "F" : "M");
+    }
+
+    const entries = (rows as any[])
+      .filter((p) => !isPacesetter(p.user_id)) // champions come from the Open board
+      .map((p) => ({
+        user_id: p.user_id,
+        name: `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim(),
+        team: p.team ?? null,
+        gender: genderOf.get(p.user_id) ?? "M",
+        points: evaluateRange(days, p.activities ?? []).total,
+      }))
+      .filter((p) => p.points > 0);
+
+    const winners: any[] = [];
+
+    for (const g of ["F", "M"] as const) {
+      const pool = entries
+        .filter((p) => p.gender === g)
+        .sort((a, b) => b.points - a.points);
+
+      if (!pool.length) continue;
+
+      // Everyone level at the top shares the week
+      const top = pool[0].points;
+      for (const p of pool.filter((x) => x.points === top)) {
+        winners.push({
+          season: SEASON.number,
+          week: w,
+          gender: g,
+          user_id: p.user_id,
+          name: p.name,
+          team: p.team,
+          points: p.points,
+          settled_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    if (winners.length) {
+      await supabaseAdmin
+        .from("weekly_champions")
+        .upsert(winners, { onConflict: "season,week,gender,user_id" });
+      console.log(`🏆 Week ${w} settled — ${winners.length} champion(s)`);
+    }
+  }
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -46,6 +163,9 @@ export async function GET(req: Request) {
       1,
       Math.min(TOTAL_WEEKS, parseInt(searchParams.get("week") || "", 10) || currentWeek)
     );
+    // Record any finished week that hasn't been settled yet
+    await settleFinishedWeeks(currentWeek);
+
     const days = weekDays(week);
 
     // A week can be short: the season opens on a Tuesday, so week 1 is
@@ -274,36 +394,45 @@ export async function GET(req: Request) {
       points: number | null;
     };
 
-    const champMap = new Map<string, ChampRow>(
-      (champs ?? []).map((c: any) => [
-        `${c.week}:${c.gender}`,
-        c as ChampRow,
-      ])
-    );
+    // A week can have several joint champions, so group rather than map
+    // one row per slot — the previous version kept only the last row
+    // read and silently dropped anyone tied with them.
+    const champsBySlot = new Map<string, ChampRow[]>();
+    for (const c of (champs ?? []) as ChampRow[]) {
+      const k = `${c.week}:${c.gender}`;
+      champsBySlot.set(k, [...(champsBySlot.get(k) ?? []), c]);
+    }
 
     const slotFor = (w: number, g: "F" | "M") => {
-      const stored = champMap.get(`${w}:${g}`);
-      if (stored) {
+      const stored = champsBySlot.get(`${w}:${g}`);
+
+      if (stored?.length) {
         return {
           status: "settled",
-          name: stored.name ?? null,
-          team: stored.team ?? null,
-          points: stored.points ?? 0,
+          names: stored.map((c) => c.name ?? "Champion"),
+          team: stored[0].team ?? null,
+          points: stored[0].points ?? 0,
         };
       }
+
       if (w === currentWeek) {
-        const leader = (g === "F" ? boardWomen : boardMen)[0];
+        const pool = g === "F" ? boardWomen : boardMen;
+        const top = pool[0]?.points ?? 0;
+        // Everyone level at the top, not just whoever sorts first
+        const tied = pool.filter((p: BoardEntry) => p.points === top);
+
         return {
           status: "live",
-          name: leader?.name ?? null,
-          team: leader?.team ?? null,
-          points: leader?.points ?? 0,
+          names: tied.map((p: BoardEntry) => p.name),
+          team: tied.length === 1 ? tied[0].team : null,
+          points: top,
         };
       }
+
       if (w < currentWeek) {
-        return { status: "unrecorded", name: null, team: null, points: 0 };
+        return { status: "unrecorded", names: [], team: null, points: 0 };
       }
-      return { status: "upcoming", name: null, team: null, points: 0 };
+      return { status: "upcoming", names: [], team: null, points: 0 };
     };
 
     const boxes = Array.from({ length: TOTAL_WEEKS }, (_, i) => ({

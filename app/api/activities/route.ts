@@ -1,7 +1,7 @@
 // app/api/activities/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { SEASON, activeSeason, SYNC_FLOOR } from "@/lib/season";
+import { SEASON, activeSeason, SYNC_FLOOR, displayWindowStart, overlapsNightHours } from "@/lib/season";
 
 // Challenge start (1 Oct 2025 00:00 IST)
 // Season dates now come from lib/season.ts, replacing the six
@@ -71,7 +71,11 @@ export async function GET() {
       .eq("season", SEASON.number)
       // Only the season currently on display: trial data before Sep 1,
       // Season 2 after. Season 1 is never shown.
-      .eq("activities.season", activeSeason());
+      .eq("activities.season", activeSeason())
+      // Date floor as well as the season tag: the season column has a
+      // DEFAULT of 2, so a row written without it set explicitly would
+      // otherwise surface regardless of when it happened.
+      .gte("activities.start_date", displayWindowStart().toISOString());
 
     // ✅ Only include activities after challenge start
     if (now >= CHALLENGE_START) {
@@ -112,6 +116,8 @@ export async function GET() {
       if (!act.start_date) return false;
       const startUTC = new Date(act.start_date);
       // A declared leave day lifts the office-hours exclusion.
+      // Night activity is hidden regardless of leave status
+      if (overlapsNightHours(startUTC, act.moving_time || 0)) return false;
       if (act.on_leave_day) return true;
       return !overlapsWorkingHours(startUTC, act.moving_time || 0);
     });
