@@ -172,6 +172,16 @@ export function displayWindowStart(now: Date = new Date()): Date {
 export const NIGHT_START_MINUTE = 23 * 60; // 23:00
 export const NIGHT_END_MINUTE = 3 * 60 + 30; // 03:30
 
+/**
+ * The rule applies from this date onward, not to the whole season.
+ *
+ * It was introduced mid-season, and applying it retroactively would
+ * have stripped points from people who had already earned them under
+ * the rules as they stood at the time. Changing the rules is fine;
+ * changing them backwards is not.
+ */
+export const NIGHT_RULE_FROM = new Date("2026-09-05T00:00:00+05:30");
+
 /** Minutes past midnight, IST. */
 function istMinutes(date: Date): number {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -196,6 +206,9 @@ export function overlapsNightHours(
   startUTC: Date,
   durationSec: number
 ): boolean {
+  // Anything recorded before the rule existed is left alone
+  if (startUTC < NIGHT_RULE_FROM) return false;
+
   const start = istMinutes(startUTC);
   const end = start + Math.max(0, Math.round(durationSec / 60));
 
