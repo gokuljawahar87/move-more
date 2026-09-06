@@ -169,8 +169,8 @@ export function displayWindowStart(now: Date = new Date()): Date {
 // running on unlit roads at two in the morning to hold a streak.
 // ═══════════════════════════════════════════════════════════════
 
-export const NIGHT_START_MINUTE = 23 * 60; // 23:00
-export const NIGHT_END_MINUTE = 3 * 60 + 30; // 03:30
+export const NIGHT_START_MINUTE = 23 * 60 + 30; // 23:30
+export const NIGHT_END_MINUTE = 3 * 60 + 30;   // 03:30
 
 /**
  * The rule applies from this date onward, not to the whole season.

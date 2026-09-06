@@ -265,9 +265,15 @@ export async function POST(req: Request) {
 
     let deleted = 0;
 
-    // Same ceiling as the master refresh: a large number here means
-    // something is off, not that someone deleted their whole week.
-    if (goneIds.length > 0 && goneIds.length <= 15) {
+    // ⚠️ DISABLED. See the note in refresh/route.ts.
+    //
+    // The 5-day lookback is a moving instant — "now minus five days" —
+    // while the delete check used the same boundary. Anything sitting
+    // right on it appeared to have been deleted on Strava when it
+    // hadn't, and was removed. That is how people lost 1 September.
+    const ALLOW_DELETIONS = false;
+
+    if (ALLOW_DELETIONS && goneIds.length > 0 && goneIds.length <= 15) {
       const { error: delError } = await supabaseAdmin
         .from("activities")
         .delete()

@@ -12,10 +12,18 @@ const SYNC_START = SYNC_FLOOR;
 const SYNC_END: Date | null = null;
 
 // Deletion of vanished activities stays off through the trial.
-// Activities deleted on Strava are removed here too. Guarded by
-// fetchOk below: a partial fetch must never be read as "everything
-// else was deleted".
-const ENABLE_DELETIONS = true;
+// ⚠️ OFF. Turning this on cost real data.
+//
+// The delete pass removes anything in the fetched window that Strava
+// didn't return. That is only safe if the fetch window and the delete
+// window match exactly — and they didn't. Activities sitting on the
+// boundary looked deleted when they were simply outside what we asked
+// Strava for, and people lost a day's points.
+//
+// Before switching this back on, make the delete window strictly
+// NARROWER than the fetch window: fetch five days, only ever delete
+// within three. That leaves a buffer no boundary mismatch can cross.
+const ENABLE_DELETIONS = false;
 
 async function runRefresh() {
   // Only people who have registered for THIS season. Without this the
