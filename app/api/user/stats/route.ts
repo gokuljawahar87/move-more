@@ -217,30 +217,22 @@ export async function GET(req: Request) {
       myActs.map((a) => new Date(a.start_date).toISOString().split("T")[0])
     ).size;
 
-    const longestWalk =
-      myActs.filter((a) => a.derived_type === "Reclassified-Walk" || a.type === "Walk").length > 0
-        ? Math.max(
-            ...myActs
-              .filter((a) => a.derived_type === "Reclassified-Walk" || a.type === "Walk")
-              .map((a) => a.distance || 0)
-          ) / 1000
-        : null;
-    const longestRun =
-      myActs.filter((a) => a.type === "Run" || a.type === "TrailRun").length > 0
-        ? Math.max(
-            ...myActs
-              .filter((a) => a.type === "Run" || a.type === "TrailRun")
-              .map((a) => a.distance || 0)
-          ) / 1000
-        : null;
-    const longestCycle =
-      myActs.filter((a) => a.type === "Ride" || a.type === "VirtualRide").length > 0
-        ? Math.max(
-            ...myActs
-              .filter((a) => a.type === "Ride" || a.type === "VirtualRide")
-              .map((a) => a.distance || 0)
-          ) / 1000
-        : null;
+    // Personal bests use the SAME discipline the activity scored as,
+    // via disciplineOf(). They used to disagree: longestWalk read
+    // derived_type while longestRun read the raw type, so a run
+    // reclassified as a walk showed up as both — the same 4.9 km
+    // appearing as a personal best run and a personal best walk.
+    const longestBy = (want: "run" | "walk" | "cycle") => {
+      const matching = myActs.filter(
+        (a) => disciplineOf(a.derived_type || a.type) === want
+      );
+      if (!matching.length) return null;
+      return Math.max(...matching.map((a) => Number(a.distance) || 0)) / 1000;
+    };
+
+    const longestWalk = longestBy("walk");
+    const longestRun = longestBy("run");
+    const longestCycle = longestBy("cycle");
 
     // ── Weekly distance totals ───────────────────────────────────
     // Simple totals, not averages: "last week I did 100 km, so this
