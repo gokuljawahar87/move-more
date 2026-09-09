@@ -1,6 +1,11 @@
 // components/Activities.tsx
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+} from "react";
 import {
   ExternalLink,
   ChevronLeft,
@@ -43,6 +48,12 @@ const challengeStart = SEASON.start;
 
 export function Activities() {
   const [activities, setActivities] = useState<Act[]>([]);
+  // Filters. The weekly run/walk/cycle totals used to sit here, but
+  // those numbers are already on the Stats page — what the feed is
+  // actually used for is finding one person's activity on one day.
+  const [fTeam, setFTeam] = useState("");
+  const [fPerson, setFPerson] = useState("");
+  const [fDate, setFDate] = useState("");
   const [weeksOrder, setWeeksOrder] = useState<string[]>([]);
   const [currentWeekIndex, setCurrentWeekIndex] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -234,10 +245,80 @@ export function Activities() {
     );
   }
 
+  // ── Filters ──────────────────────────────────────────────────
+  // Dropdowns are built from the activities actually loaded, so they
+  // never offer a team or a person with nothing to show.
+  const personName = (a: Act) =>
+    `${a.profiles?.first_name ?? ""} ${a.profiles?.last_name ?? ""}`.trim();
+
+  const teamOptions = Array.from(
+    new Set(activities.map((a) => a.profiles?.team).filter(Boolean) as string[])
+  ).sort((x, y) => teamName(x).localeCompare(teamName(y)));
+
+  const personOptions = Array.from(
+    new Set(
+      activities
+        .filter((a) => !fTeam || a.profiles?.team === fTeam)
+        .map(personName)
+        .filter(Boolean)
+    )
+  ).sort();
+
+  const filtersOn = !!(fTeam || fPerson || fDate);
+
+  const matches = (a: Act) => {
+    if (fTeam && a.profiles?.team !== fTeam) return false;
+    if (fPerson && personName(a) !== fPerson) return false;
+    if (fDate) {
+      const ist = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date(a.start_date));
+      if (ist !== fDate) return false;
+    }
+    return true;
+  };
+
+  // A date search looks across the whole season, not just the week on
+  // screen — otherwise picking a date outside it returns nothing and
+  // looks broken.
+  const matchCount = (fDate ? activities : activities).filter(matches).length;
+
   const weekKey = weeksOrder[currentWeekIndex];
   const weekData = grouped[weekKey];
   const days = weekData?.days || {};
-  const totals = computeWeekTotals(days);
+
+  /**
+   * The days actually rendered.
+   *
+   * Without a date the week on screen is filtered in place. WITH a
+   * date, the search runs across the whole season and jumps to it —
+   * otherwise picking a day outside the current week would return
+   * nothing and look broken.
+   */
+  const visibleDays: Record<string, Act[]> = (() => {
+    if (!filtersOn) return days;
+
+    const source: Act[] = fDate
+      ? activities
+      : (Object.values(days).flat() as Act[]);
+
+    const kept = source.filter(matches);
+
+    const out: Record<string, Act[]> = {};
+    for (const a of kept) {
+      const label = new Date(a.start_date).toLocaleDateString("en-GB", {
+        timeZone: "Asia/Kolkata",
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });
+      out[label] = [...(out[label] ?? []), a];
+    }
+    return out;
+  })();
 
   const getIcon = (type: string, size = 18) => {
     if (type === "Ride" || type === "VirtualRide")
@@ -251,46 +332,116 @@ export function Activities() {
     <div className="p-4 space-y-6 text-white relative">
       {refreshControls}
 
-      {/* Weekly header + summary */}
-      <div className="flex flex-col items-center gap-3">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => setCurrentWeekIndex((i) => Math.max(0, i - 1))}
-            disabled={currentWeekIndex === 0}
-            className="p-2 rounded-full bg-gray-700 disabled:opacity-40"
-          >
-            <ChevronLeft size={20} />
-          </button>
+      {/* Week navigation, then filters. */}
+      <div className="flex items-center justify-between gap-3">
+        <button
+          onClick={() => setCurrentWeekIndex((i: number) => Math.max(0, i - 1))}
+          disabled={currentWeekIndex === 0}
+          aria-label="Previous week"
+          className="p-2 rounded-full border border-ink-800 text-chalk-dim disabled:opacity-30 shrink-0"
+        >
+          <ChevronLeft size={18} />
+        </button>
 
-          <div className="text-center">
-            <div className="text-lg font-bold">{weekData.label}</div>
-            <div className="flex gap-2 items-center justify-center mt-2">
-              <span className="bg-white text-blue-900 px-2 py-0.5 rounded text-sm">
-                Run {totals.run.toFixed(1)} km
-              </span>
-              <span className="bg-white text-blue-900 px-2 py-0.5 rounded text-sm">
-                Cycle {totals.cycle.toFixed(1)} km
-              </span>
-              <span className="bg-white text-blue-900 px-2 py-0.5 rounded text-sm">
-                Walk {totals.walk.toFixed(1)} km
-              </span>
-            </div>
-          </div>
-
-          <button
-            onClick={() =>
-              setCurrentWeekIndex((i) => Math.min(weeksOrder.length - 1, i + 1))
-            }
-            disabled={currentWeekIndex === weeksOrder.length - 1}
-            className="p-2 rounded-full bg-gray-700 disabled:opacity-40"
-          >
-            <ChevronRight size={20} />
-          </button>
+        <div className="font-display font-600 uppercase tracking-wide text-[15px] text-center min-w-0 truncate">
+          {weekData.label}
         </div>
+
+        <button
+          onClick={() =>
+            setCurrentWeekIndex((i: number) =>
+              Math.min(weeksOrder.length - 1, i + 1)
+            )
+          }
+          disabled={currentWeekIndex === weeksOrder.length - 1}
+          aria-label="Next week"
+          className="p-2 rounded-full border border-ink-800 text-chalk-dim disabled:opacity-30 shrink-0"
+        >
+          <ChevronRight size={18} />
+        </button>
       </div>
 
+      <div className="bib px-3.5 pt-4 pb-3.5">
+        <div className="flex items-center justify-between mb-2.5">
+          <p className="eyebrow text-[9px]">Find an activity</p>
+          {filtersOn && (
+            <button
+              onClick={() => {
+                setFTeam("");
+                setFPerson("");
+                setFDate("");
+              }}
+              className="split text-tape"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <select
+            value={fTeam}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+              setFTeam(e.target.value);
+              setFPerson(""); // the person list depends on the team
+            }}
+            className="bg-ink-950 border border-ink-800 rounded-lg px-2.5 py-2
+                       text-chalk text-sm focus:border-tape focus:outline-none"
+          >
+            <option value="">All teams</option>
+            {teamOptions.map((t) => (
+              <option key={t} value={t}>
+                {teamName(t)}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={fPerson}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+              setFPerson(e.target.value)
+            }
+            className="bg-ink-950 border border-ink-800 rounded-lg px-2.5 py-2
+                       text-chalk text-sm focus:border-tape focus:outline-none"
+          >
+            <option value="">Everyone</option>
+            {personOptions.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+
+          <input
+            type="date"
+            value={fDate}
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+              setFDate(e.target.value)
+            }
+            className="col-span-2 bg-ink-950 border border-ink-800 rounded-lg px-2.5 py-2
+                       text-chalk text-sm focus:border-tape focus:outline-none
+                       [color-scheme:dark]"
+          />
+        </div>
+
+        {filtersOn && (
+          <p className="split text-chalk-dim mt-2.5">
+            {matchCount} {matchCount === 1 ? "activity" : "activities"} match
+            {fDate ? "" : " this week"}
+          </p>
+        )}
+      </div>
+
+      {filtersOn && Object.keys(visibleDays).length === 0 && (
+        <div className="bib px-4 pt-5 pb-4 text-center">
+          <p className="split text-chalk-dim">
+            Nothing matches those filters.
+          </p>
+        </div>
+      )}
+
       {/* Daily activity cards */}
-      {Object.entries(days)
+      {Object.entries(visibleDays)
         .sort(([d1], [d2]) => new Date(d2).getTime() - new Date(d1).getTime())
         .map(([dateLabel, acts]) => (
           <div key={dateLabel} className="space-y-3">
@@ -443,19 +594,3 @@ function groupByWeek(activities: Act[]) {
   return map;
 }
 
-function computeWeekTotals(days: Record<string, Act[]>) {
-  let run = 0,
-    walk = 0,
-    cycle = 0;
-
-  Object.values(days).forEach((acts) => {
-    acts.forEach((a) => {
-      const km = Number(a.distance || 0) / 1000;
-      if (a.type === "Run" || a.type === "TrailRun") run += km;
-      else if (a.type === "Walk" || a.derived_type === "Reclassified-Walk") walk += km;
-      else if (a.type === "Ride" || a.type === "VirtualRide") cycle += km;
-    });
-  });
-
-  return { run, walk, cycle };
-}
