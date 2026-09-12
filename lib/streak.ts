@@ -12,7 +12,7 @@
 // IST is 20:30 UTC the PREVIOUS day. Keying days off UTC would put those
 // two in different buckets and silently break streaks overnight.
 
-import { SEASON, overlapsNightHours } from "./season";
+import { SEASON, overlapsNightHours, isRestDay } from "./season";
 
 export const STREAK_MIN_MOVING_SECONDS = 30 * 60;
 
@@ -117,6 +117,11 @@ export function qualifiesForStreak(a: StreakActivity): boolean {
 
   const start = new Date(a.start_date);
 
+  // A rest day is a rest day. Activity on one doesn't count towards a
+  // streak — and crucially it doesn't need to, because the streak
+  // steps over rest days entirely (see computeStreaks).
+  if (isRestDay(istDayKey(start))) return false;
+
   // Night activity never counts, leave day or not. A streak is exactly
   // the kind of thing that would tempt someone out at 2am.
   if (overlapsNightHours(start, moving)) return false;
@@ -161,8 +166,19 @@ export function computeStreaks(
   let run = 0;
   let prev: string | null = null;
 
+  // Two active days count as consecutive if only rest days sit between
+  // them — the same bridging the current streak does.
+  const onlyRestBetween = (from: string, to: string) => {
+    let cursor = addDays(from, 1);
+    while (cursor < to) {
+      if (!isRestDay(cursor)) return false;
+      cursor = addDays(cursor, 1);
+    }
+    return true;
+  };
+
   for (const day of sorted) {
-    run = prev && addDays(prev, 1) === day ? run + 1 : 1;
+    run = prev && onlyRestBetween(prev, day) ? run + 1 : 1;
     if (run > maxStreak) maxStreak = run;
     prev = day;
   }
@@ -176,7 +192,16 @@ export function computeStreaks(
   let currentStreak = 0;
   let cursor = todayDone ? today : addDays(today, -1);
 
-  while (days.has(cursor)) {
+  // Step over rest days rather than stopping at them. Taking the
+  // mandatory break must not cost someone their streak — that would
+  // make the break something to resent.
+  let guard = 0;
+  while (guard++ < 400) {
+    if (isRestDay(cursor)) {
+      cursor = addDays(cursor, -1);
+      continue;
+    }
+    if (!days.has(cursor)) break;
     currentStreak++;
     cursor = addDays(cursor, -1);
   }

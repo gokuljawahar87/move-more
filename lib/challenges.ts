@@ -9,7 +9,7 @@
 // Everything is verified automatically from synced Strava data, so no
 // moderator has to tick anything off.
 
-import { SEASON, overlapsNightHours } from "./season";
+import { SEASON, overlapsNightHours, isRestDay } from "./season";
 import { istDayKey } from "./streak";
 
 export type Difficulty = "easy" | "medium" | "hard";
@@ -119,7 +119,13 @@ export const SCHEDULE: Record<string, string[]> = {
   "2026-09-03": ["dur-35", "pace-9-1"], // Thu
   "2026-09-04": ["mix-15", "pts-60"], // Fri
   "2026-09-05": ["day-5", "dur-40", "early-6"], // Sat
-  "2026-09-06": ["one-5", "early-530", "beat-avg"], // Sun
+  // Week 1's Sunday swaps "Better Than Before" for a straight hour.
+  // That challenge compares this week against last week, and for the
+  // opening week there is no last week — so it would either hand
+  // everyone 30 points or, worse, set a target only for whoever
+  // happened to be active during the August trial. It returns from
+  // week 2 onwards, when there is a real week to beat.
+  "2026-09-06": ["one-5", "early-530", "dur-60"], // Sun
   "2026-09-07": ["pts-40", "early-530"], // Mon
   "2026-09-08": ["pace-9-2", "two-15"], // Tue
   "2026-09-09": ["pts-60", "dur-30"], // Wed
@@ -214,8 +220,11 @@ const ACTIVE_SCHEDULE: Record<string, string[]> = TEST_MODE
   ? { ...buildTestSchedule(), ...SCHEDULE }
   : SCHEDULE;
 
-/** Challenges for an IST date. Empty outside the season. */
+/** Challenges for an IST date. Empty outside the season, or on a rest day. */
 export function challengesForDate(dayKey: string): Challenge[] {
+  // Mondays and Fridays carry no challenges from 14 September. Setting
+  // a target on a mandatory break would undo the point of having one.
+  if (isRestDay(dayKey)) return [];
   return (ACTIVE_SCHEDULE[dayKey] ?? []).map((id) => BY_ID[id]).filter(Boolean);
 }
 

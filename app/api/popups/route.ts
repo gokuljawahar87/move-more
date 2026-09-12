@@ -16,6 +16,7 @@ import {
   activeSeason,
   displayWindowStart,
   overlapsNightHours,
+  isRestDayAt,
 } from "@/lib/season";
 import { overlapsOfficeHours } from "@/lib/streak";
 import { DailyPoints, disciplineOf } from "@/lib/points";
@@ -103,7 +104,8 @@ async function scanForNewMilestones() {
     const counted = acts.filter((a: any) => {
       if (!a?.is_valid || !a.start_date) return false;
       const start = new Date(a.start_date);
-      // Night activity is excluded regardless of leave status
+      // Rest days and night activity don't count toward milestones
+      if (isRestDayAt(start)) return false;
       if (overlapsNightHours(start, a.moving_time || 0)) return false;
       if (a.on_leave_day) return true;
       return !overlapsOfficeHours(start, a.moving_time || 0);

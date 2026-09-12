@@ -1,7 +1,7 @@
 // app/api/activities/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { SEASON, activeSeason, SYNC_FLOOR, displayWindowStart, overlapsNightHours } from "@/lib/season";
+import { SEASON, activeSeason, SYNC_FLOOR, displayWindowStart, overlapsNightHours, isRestDayAt } from "@/lib/season";
 
 // Challenge start (1 Oct 2025 00:00 IST)
 // Season dates now come from lib/season.ts, replacing the six
@@ -116,7 +116,8 @@ export async function GET() {
       if (!act.start_date) return false;
       const startUTC = new Date(act.start_date);
       // A declared leave day lifts the office-hours exclusion.
-      // Night activity is hidden regardless of leave status
+      // Rest-day and night activity are both hidden, leave or not
+      if (isRestDayAt(startUTC)) return false;
       if (overlapsNightHours(startUTC, act.moving_time || 0)) return false;
       if (act.on_leave_day) return true;
       return !overlapsWorkingHours(startUTC, act.moving_time || 0);

@@ -273,6 +273,9 @@ export default function Challenges() {
       {/* ── Day strip ─────────────────────────────────────────── */}
       <div className="grid grid-cols-7 gap-1.5">
         {data.days.map((d: string) => {
+          // Rest days are dimmed in the strip so the week reads at a
+          // glance as five working days plus two off.
+          const rest = (data.restDays ?? []).includes(d);
           const dt = new Date(`${d}T12:00:00+05:30`);
           const active = d === data.selectedDay;
           const future = d > data.today;
@@ -284,13 +287,15 @@ export default function Challenges() {
               className={`flex flex-col items-center py-2 rounded-lg border transition-colors ${
                 active
                   ? "bg-tape border-tape text-ink-950"
+                  : rest
+                  ? "bg-ink-950 border-ink-800 text-chalk-dim opacity-55"
                   : future
                   ? "bg-ink-900 border-ink-800 text-chalk-dim opacity-50"
                   : "bg-ink-900 border-ink-800 text-chalk-dim hover:border-ink-700"
               }`}
             >
               <span className="font-display uppercase text-[9px] tracking-wider">
-                {DOW[dt.getUTCDay()]}
+                {rest && !active ? "REST" : DOW[dt.getUTCDay()]}
               </span>
               <span
                 className={`readout text-base leading-none mt-0.5 ${
@@ -305,6 +310,16 @@ export default function Challenges() {
       </div>
 
       {/* ── The day's challenges ──────────────────────────────── */}
+      {data.selectedIsRestDay ? (
+        <div className="bib px-4 pt-6 pb-5 text-center">
+          <p className="font-display font-700 uppercase text-lg">Rest day</p>
+          <p className="split text-chalk-dim mt-2 leading-relaxed">
+            Mondays and Fridays are off from 14 September. No challenges,
+            and nothing recorded today counts — your streak carries
+            straight over it.
+          </p>
+        </div>
+      ) : (
       <div className="space-y-2.5">
         {data.challenges.map((c: any) => {
           const Icon = ICONS[c.icon] ?? Target;
@@ -395,6 +410,7 @@ export default function Challenges() {
           </span>
         </div>
       </div>
+      )}
 
       {/* ── Your week ─────────────────────────────────────────── */}
       <div className="bib flex items-center justify-between px-4 pt-5 pb-4">

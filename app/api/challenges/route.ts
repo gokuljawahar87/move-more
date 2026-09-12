@@ -9,10 +9,12 @@
 // leaderboard and never feed into it.
 
 import { NextResponse } from "next/server";
+import { cached } from "@/lib/cache";
 import { cookies } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { SEASON, activeSeason } from "@/lib/season";
 import { istDayKey } from "@/lib/streak";
+import { isRestDay } from "@/lib/season";
 import { isPacesetter } from "@/lib/divisions";
 import {
   challengesForDate,
@@ -24,6 +26,17 @@ import {
 } from "@/lib/challenges";
 
 export const dynamic = "force-dynamic";
+
+/** One person's standing on the weekly board. */
+type BoardEntry = {
+  user_id: string;
+  name: string;
+  team: string | null;
+  gender: "F" | "M";
+  points: number;
+  /** When this week's total was reached, for breaking ties */
+  reachedAt: number;
+};
 
 /**
  * The 7 IST day keys of a season week, Monday to Sunday.
@@ -213,6 +226,16 @@ export async function GET(req: Request) {
     );
     const rangeEnd = new Date(`${lastDay}T23:59:59+05:30`);
 
+    /**
+     * Everything from here to the boards below is identical for every
+     * viewer, so it's computed once a minute and shared.
+     *
+     * It matters most here: working out the tie-break timings replays
+     * each person's activities day by day, which is by far the most
+     * expensive thing the app does. Ninety people opening the Weekly
+     * tab used to mean ninety replays of the same week.
+     */
+    const shared = await cached(`challenges:week:${week}`, 60, async () => {
     const { data: rows, error } = await supabaseAdmin
       .from("profiles")
       .select(
@@ -256,16 +279,6 @@ export async function GET(req: Request) {
     // ── Weekly leaderboards ──────────────────────────────────────
     // Split into two, so the women's competition isn't decided by who
     // happens to run fastest overall.
-    type BoardEntry = {
-      user_id: string;
-      name: string;
-      team: string | null;
-      gender: "F" | "M";
-      points: number;
-      /** When this week's total was reached, for breaking ties */
-      reachedAt: number;
-    };
-
     /**
      * The moment a person's weekly total was actually reached.
      *
@@ -354,6 +367,27 @@ export async function GET(req: Request) {
 
     const boardMen = openBoard.filter((p: BoardEntry) => p.gender === "M");
     const boardWomen = openBoard.filter((p: BoardEntry) => p.gender === "F");
+
+      return {
+        rows,
+        genderOf,
+        allEntries,
+        pacesetters,
+        openBoard,
+        boardMen,
+        boardWomen,
+      };
+    });
+
+    const {
+      rows,
+      genderOf,
+      allEntries,
+      pacesetters,
+      openBoard,
+      boardMen,
+      boardWomen,
+    } = shared;
 
     // Kept for the champion boxes, which crown one winner per week
     const board = openBoard;
@@ -449,6 +483,9 @@ export async function GET(req: Request) {
       days,
       today: todayKey,
       selectedDay: day,
+      // So the app can say "rest day" rather than showing an empty list
+      selectedIsRestDay: isRestDay(day),
+      restDays: days.filter((d: string) => isRestDay(d)),
       challenges: dayEval.results.map((r) => ({
         id: r.id,
         title: r.title,

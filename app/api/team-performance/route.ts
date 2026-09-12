@@ -1,7 +1,8 @@
 // app/api/team-performance/route.ts
 import { NextResponse } from "next/server";
+import { cached } from "@/lib/cache";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { SEASON, activeSeason, SYNC_FLOOR, displayWindowStart, overlapsNightHours } from "@/lib/season";
+import { SEASON, activeSeason, SYNC_FLOOR, displayWindowStart, overlapsNightHours, isRestDayAt } from "@/lib/season";
 import { DailyPoints, disciplineOf } from "@/lib/points";
 
 // Challenge start (1 Oct 2025, 00:00 IST)
@@ -51,8 +52,16 @@ function overlapsWorkingHours(startUTC: Date, durationSec: number): boolean {
   return istStart <= workEnd && istEnd >= workStart;
 }
 
+/**
+ * Same computation for everyone, so it runs at most once a minute and
+ * is shared. Keyed by the date filter, since "overall" and a specific
+ * day are different answers.
+ */
 export async function GET(request: Request) {
   try {
+    const key = new URL(request.url).searchParams.get("date") ?? "overall";
+
+    return await cached(`team-performance:${key}`, 60, async () => {
     const now = new Date();
     const { searchParams } = new URL(request.url);
     const selectedDate = searchParams.get("date");
@@ -143,7 +152,11 @@ export async function GET(request: Request) {
           if (startUTC >= CHALLENGE_END) continue;
 
           // A declared leave day lifts the office-hours exclusion.
-          // Night hours are excluded for safety, and a leave day does
+          // Mondays and Fridays are mandatory rest days from 14 Sep.
+        // Nothing on them scores.
+        if (isRestDayAt(startUTC)) continue;
+
+        // Night hours are excluded for safety, and a leave day does
         // not lift them the way it lifts office hours.
         if (overlapsNightHours(startUTC, a.moving_time || 0)) continue;
         if (!a.on_leave_day && overlapsWorkingHours(startUTC, a.moving_time || 0)) continue;
@@ -185,8 +198,10 @@ export async function GET(request: Request) {
     );
     const teams = Object.values(teamMap).sort((a, b) => b.totalPoints - a.totalPoints);
 
-    return NextResponse.json(teams);
+      return NextResponse.json(teams);
+    });
   } catch (err: any) {
+    // Outside the cache: a failure shouldn't be served for a minute.
     console.error("❌ API error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

@@ -1,7 +1,7 @@
 // app/api/user/stats/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { SEASON, activeSeason, SYNC_FLOOR, displayWindowStart, overlapsNightHours } from "@/lib/season";
+import { SEASON, activeSeason, SYNC_FLOOR, displayWindowStart, overlapsNightHours, isRestDayAt } from "@/lib/season";
 import { computeStreaks, istDayKey } from "@/lib/streak";
 import { DailyPoints, disciplineOf, DAILY_POINT_CAP } from "@/lib/points";
 import { mondayOf, addDays } from "@/lib/challenges";
@@ -144,6 +144,10 @@ export async function GET(req: Request) {
         if (!a?.is_valid || !a.start_date) continue;
         const startUTC = new Date(a.start_date);
         // A declared leave day lifts the office-hours exclusion.
+        // Mondays and Fridays are mandatory rest days from 14 Sep.
+        // Nothing on them scores.
+        if (isRestDayAt(startUTC)) continue;
+
         // Night hours are excluded for safety, and a leave day does
         // not lift them the way it lifts office hours.
         if (overlapsNightHours(startUTC, a.moving_time || 0)) continue;

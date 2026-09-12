@@ -169,8 +169,8 @@ export function displayWindowStart(now: Date = new Date()): Date {
 // running on unlit roads at two in the morning to hold a streak.
 // ═══════════════════════════════════════════════════════════════
 
-export const NIGHT_START_MINUTE = 23 * 60 + 30; // 23:30
-export const NIGHT_END_MINUTE = 3 * 60 + 30;   // 03:30
+export const NIGHT_START_MINUTE = 23 * 60; // 23:00
+export const NIGHT_END_MINUTE = 3 * 60 + 30; // 03:30
 
 /**
  * The rule applies from this date onward, not to the whole season.
@@ -212,14 +212,101 @@ export function overlapsNightHours(
   const start = istMinutes(startUTC);
   const end = start + Math.max(0, Math.round(durationSec / 60));
 
+  // The window may or may not wrap midnight, depending on where it
+  // starts. At 23:00 it does — 23:00→24:00 plus 00:00→03:30. Set to
+  // midnight and it doesn't: it's simply 00:00→03:30. Building the
+  // segments blindly would turn a midnight start into [0, 1440] and
+  // exclude the entire day.
+  const wraps = NIGHT_START_MINUTE > NIGHT_END_MINUTE;
+
+  const base: [number, number][] = wraps
+    ? [
+        [NIGHT_START_MINUTE, 24 * 60], // evening portion
+        [0, NIGHT_END_MINUTE], // early-hours portion
+      ]
+    : [[NIGHT_START_MINUTE, NIGHT_END_MINUTE]];
+
+  // The same window on the following day, for an activity that starts
+  // before it and runs in.
   const segments: [number, number][] = [
-    [NIGHT_START_MINUTE, 24 * 60], // 23:00 → midnight
-    [0, NIGHT_END_MINUTE], // midnight → 03:30
-    // The same two segments on the following day, for an activity that
-    // starts before 23:00 and runs into the night
-    [NIGHT_START_MINUTE + 24 * 60, 48 * 60],
-    [24 * 60, NIGHT_END_MINUTE + 24 * 60],
+    ...base,
+    ...base.map(([a, b]) => [a + 24 * 60, b + 24 * 60] as [number, number]),
   ];
 
   return segments.some(([a, b]) => start < b && end > a);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// REST DAYS
+//
+// Mondays and Fridays are mandatory breaks from 14 September.
+//
+// Two months of daily activity is a lot, and the streak feature was
+// quietly pushing against rest — which is the opposite of what an
+// event about building a sustainable habit should do. Activity on a
+// rest day doesn't score, doesn't appear in the feed, and carries no
+// challenges. It also doesn't BREAK a streak: rest days are stepped
+// over, so taking the break costs nothing.
+//
+// Not retroactive. Everything before the date below keeps its points.
+// ═══════════════════════════════════════════════════════════════
+
+/** 0 = Sunday … 6 = Saturday */
+export const REST_WEEKDAYS = [1, 5]; // Monday, Friday
+
+export const REST_RULE_FROM = new Date("2026-09-14T00:00:00+05:30");
+
+/** Weekday in IST, 0 = Sunday. */
+function istWeekday(dayKey: string): number {
+  const wd = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kolkata",
+    weekday: "short",
+  }).format(new Date(`${dayKey}T12:00:00+05:30`));
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(wd);
+}
+
+/** Is this IST date ("YYYY-MM-DD") a mandatory rest day? */
+export function isRestDay(dayKey: string): boolean {
+  if (dayKey < istDayKeyLocal(REST_RULE_FROM)) return false;
+  return REST_WEEKDAYS.includes(istWeekday(dayKey));
+}
+
+/** Same for an instant rather than a date string. */
+export function isRestDayAt(date: Date): boolean {
+  return isRestDay(istDayKeyLocal(date));
+}
+
+/** Local copy so this module has no import cycle with lib/streak. */
+function istDayKeyLocal(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const get = (t: string) => parts.find((p) => p.type === t)!.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+/**
+ * How many scoring days have elapsed, inclusive of today.
+ *
+ * Used for the "clean sheet" podiums — with rest days the maximum is
+ * no longer simply day number times the cap.
+ */
+export function scoringDaysElapsed(now: Date = new Date()): number {
+  const start = istDayKeyLocal(SEASON.start);
+  const today = istDayKeyLocal(now);
+  if (today < start) return 0;
+
+  let count = 0;
+  let cursor = start;
+  while (cursor <= today) {
+    if (!isRestDay(cursor)) count++;
+    const [y, m, d] = cursor.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    dt.setUTCDate(dt.getUTCDate() + 1);
+    cursor = dt.toISOString().slice(0, 10);
+  }
+  return count;
 }

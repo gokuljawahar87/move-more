@@ -152,6 +152,10 @@ export default function HelpSheet({
               body="Mark the day as personal leave in the app BEFORE you head out, and that day's daytime activity counts. It shows publicly on your activity."
             />
             <Item
+              head="Monday and Friday are rest days"
+              body="From 14 September, nothing recorded on a Monday or Friday counts, and there are no challenges those days. Two months of daily activity is a lot, and rest is part of getting fitter rather than a gap in it. Your streak steps straight over them, so taking the break costs you nothing."
+            />
+            <Item
               head="Late night and early morning"
               body="Anything between 11:00 pm and 3:30 am doesn't count and won't appear in the feed. No leaderboard is worth being out on an unlit road at that hour — and unlike office hours, marking leave doesn't change this one."
             />

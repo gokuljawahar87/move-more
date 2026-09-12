@@ -1,8 +1,16 @@
 // app/api/leaderboard/route.ts
 
 import { NextResponse } from "next/server";
+import { cached } from "@/lib/cache";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { SEASON, activeSeason, SYNC_FLOOR, overlapsNightHours } from "@/lib/season";
+import {
+  SEASON,
+  activeSeason,
+  SYNC_FLOOR,
+  overlapsNightHours,
+  isRestDayAt,
+  scoringDaysElapsed,
+} from "@/lib/season";
 import { DailyPoints, disciplineOf, DAILY_POINT_CAP } from "@/lib/points";
 import {
   computeStreaks,
@@ -375,8 +383,18 @@ function calculateStreakAchievedAt(
 // GET
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * The board is identical for everyone, so it's computed at most once a
+ * minute and shared. Before this, ninety people opening the app meant
+ * ninety full recalculations across every activity of the season —
+ * which consumed the entire Vercel CPU allowance.
+ *
+ * A sync clears the cache, so new points appear immediately after a
+ * refresh rather than waiting out the minute.
+ */
 export async function GET() {
   try {
+    return await cached("leaderboard", 60, async () => {
     const now = new Date();
 
     // ─────────────────────────────────────────────────────────
@@ -587,6 +605,12 @@ export async function GET() {
         // OFFICE-HOURS EXCLUSION
         // ────────────────────────────────────────────────────
 
+        // Mondays and Fridays are mandatory rest days from 14 Sep.
+        // Nothing recorded on one scores.
+        if (isRestDayAt(startUTC)) {
+          continue;
+        }
+
         // Night hours are excluded for safety. Unlike office hours, a
         // declared leave day does NOT lift this — nobody should be
         // running unlit roads at two in the morning for a streak.
@@ -773,7 +797,10 @@ export async function GET() {
       ) + 1
     );
 
-    const maxPossible = dayNumber * DAILY_POINT_CAP;
+    // Rest days carry no points, so the clean-sheet target counts only
+    // the days that actually score — not every day since the start.
+    const scoringDays = scoringDaysElapsed();
+    const maxPossible = scoringDays * DAILY_POINT_CAP;
 
     // Rounded, because points are floats and someone on exactly the
     // cap can land a hair under it.
@@ -927,27 +954,22 @@ export async function GET() {
 
       // So the app can show "500 / 500" rather than a bare total
       dayNumber,
+      scoringDays,
       maxPossible,
 
       teams,
 
       participation,
     });
+    });
   } catch (err: any) {
-    console.error(
-      "❌ Unexpected error in /leaderboard:",
-      err
-    );
+    // Outside the cache on purpose: a failure shouldn't be served to
+    // everyone for the next minute.
+    console.error("❌ Unexpected error in /leaderboard:", err);
 
     return NextResponse.json(
-      {
-        error:
-          err.message ||
-          "Failed to fetch leaderboard",
-      },
-      {
-        status: 500,
-      }
+      { error: err.message || "Failed to fetch leaderboard" },
+      { status: 500 }
     );
   }
 }
