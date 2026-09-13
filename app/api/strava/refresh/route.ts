@@ -4,7 +4,11 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { SEASON, SYNC_FLOOR, seasonForDate } from "@/lib/season";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Pro allows up to 300s by default (more with Fluid Compute). The old
+// Hobby-era 60s cap was too tight once the roster grew — with ~100
+// profiles processed one after another, even a smooth run sits right
+// on the edge of 60s, and any slowdown tips it over.
+export const maxDuration = 280;
 
 // Sync reaches back to the trial start; the season each activity
 // belongs to is decided per-activity by seasonForDate().
@@ -67,6 +71,16 @@ async function runRefresh() {
 
   for (const profile of profiles) {
     if (!profile.strava_refresh_token) continue;
+
+    // Everything for this profile lives inside its own try/catch now.
+    // Previously, an uncaught exception from any single profile — a
+    // dropped connection, a Strava timeout, anything fetch() itself
+    // throws rather than returning a bad status for — propagated out
+    // of the whole function and failed the entire run. At ~100
+    // profiles, some transient network hiccup on any one of them was
+    // likely on most runs, which is why refresh was failing "every
+    // time" even though most people would have synced fine.
+    try {
 
     let accessToken = profile.strava_access_token;
     const now = Math.floor(Date.now() / 1000);
@@ -280,6 +294,16 @@ async function runRefresh() {
     }
 
     refreshedUsers++;
+    } catch (err: any) {
+      // Whatever slipped past the per-step error handling above —
+      // this profile is skipped, and everyone after it still runs.
+      console.error(`❌ Unhandled error for ${profile.user_id}:`, err);
+      failures.push({
+        user_id: profile.user_id,
+        reason: `unhandled_${err?.message?.slice(0, 60) || "error"}`,
+      });
+      continue;
+    }
   }
 
   await supabaseAdmin.from("sync_metadata").upsert({

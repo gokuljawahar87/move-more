@@ -394,7 +394,14 @@ function calculateStreakAchievedAt(
  */
 export async function GET() {
   try {
-    return await cached("leaderboard", 60, async () => {
+    // ⚠️ Cache the DATA, never the Response. A Response body is a
+    // stream that can only be read once — the first request to hit a
+    // cached NextResponse drains it when it's sent to the browser, and
+    // every request after that within the same window gets an empty
+    // body back. That produced "unexpected end of JSON input",
+    // intermittently, only on the second-or-later request inside a
+    // given 60s cache window.
+    const result = await cached("leaderboard", 60, async () => {
     const now = new Date();
 
     // ─────────────────────────────────────────────────────────
@@ -495,14 +502,14 @@ export async function GET() {
     // ─────────────────────────────────────────────────────────
 
     if (!profiles.length) {
-      return NextResponse.json({
+      return {
         topFemales: [],
         topMales: [],
         dayNumber: 1,
         maxPossible: DAILY_POINT_CAP,
         teams: [],
         participation: [],
-      });
+      };
     }
 
     // ─────────────────────────────────────────────────────────
@@ -941,7 +948,7 @@ export async function GET() {
       return publicUser;
     };
 
-    return NextResponse.json({
+    return {
       // Everyone at the maximum, not a top three
       topFemales: perfectFemales.map((u) => ({
         ...cleanUser(u),
@@ -960,8 +967,11 @@ export async function GET() {
       teams,
 
       participation,
+    };
     });
-    });
+
+    // Built fresh on every call, from the cached data.
+    return NextResponse.json(result);
   } catch (err: any) {
     // Outside the cache on purpose: a failure shouldn't be served to
     // everyone for the next minute.

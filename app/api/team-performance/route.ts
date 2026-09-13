@@ -61,7 +61,13 @@ export async function GET(request: Request) {
   try {
     const key = new URL(request.url).searchParams.get("date") ?? "overall";
 
-    return await cached(`team-performance:${key}`, 60, async () => {
+    // ⚠️ Cache the DATA, never the Response. A Response body is a
+    // stream that can only be read once — the first request to hit a
+    // cached NextResponse drains it when it's sent to the browser, and
+    // every request after that gets an empty body back. That's what
+    // produced "unexpected end of JSON input": intermittent, because it
+    // only bit the second request to land inside the same 60s window.
+    const result = await cached(`team-performance:${key}`, 60, async () => {
     const now = new Date();
     const { searchParams } = new URL(request.url);
     const selectedDate = searchParams.get("date");
@@ -116,7 +122,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     if (!data?.length) {
-      return NextResponse.json({ message: "No activities found for this day", teams: [] });
+      return { message: "No activities found for this day", teams: [] };
     }
 
     // 🧮 Group by team
@@ -198,8 +204,11 @@ export async function GET(request: Request) {
     );
     const teams = Object.values(teamMap).sort((a, b) => b.totalPoints - a.totalPoints);
 
-      return NextResponse.json(teams);
+      return teams;
     });
+
+    // Built fresh every call, from the cached data.
+    return NextResponse.json(result);
   } catch (err: any) {
     // Outside the cache: a failure shouldn't be served for a minute.
     console.error("❌ API error:", err);

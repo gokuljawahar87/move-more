@@ -50,7 +50,11 @@ export const SEASON = {
   // ⬇️ Declared holidays — office hours are NOT excluded on these days.
   // Season 1 had these hardcoded as 2025-10-20 / 21 in four separate
   // route files; update the list here instead.
-  holidays: [] as string[],
+  holidays: [
+    "2026-09-14", // Declared holiday
+    "2026-10-02", // Declared holiday
+    "2026-10-19", // Declared holiday
+  ] as string[],
 };
 
 /**
@@ -169,7 +173,7 @@ export function displayWindowStart(now: Date = new Date()): Date {
 // running on unlit roads at two in the morning to hold a streak.
 // ═══════════════════════════════════════════════════════════════
 
-export const NIGHT_START_MINUTE = 23 * 60; // 23:00
+export const NIGHT_START_MINUTE = 23 * 60 + 30; // 23:30
 export const NIGHT_END_MINUTE = 3 * 60 + 30; // 03:30
 
 /**
