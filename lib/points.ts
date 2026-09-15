@@ -67,10 +67,23 @@ export class DailyPoints {
   /** Distance by discipline — never capped */
   km: Record<"run" | "walk" | "cycle", number> = { run: 0, walk: 0, cycle: 0 };
 
-  add(startDate: string | Date, discipline: Discipline, distanceKm: number) {
+  /**
+   * `countsForPoints = false` is for rest-day activity: it still shows
+   * up in distance totals, personal bests and milestones, but earns
+   * nothing — the whole point of a rest day is that it doesn't add to
+   * the score.
+   */
+  add(
+    startDate: string | Date,
+    discipline: Discipline,
+    distanceKm: number,
+    countsForPoints: boolean = true
+  ) {
     if (!discipline || !(distanceKm > 0)) return;
 
     this.km[discipline] += distanceKm;
+
+    if (!countsForPoints) return;
 
     const day = istDay(
       typeof startDate === "string" ? new Date(startDate) : startDate

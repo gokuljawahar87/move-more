@@ -157,20 +157,21 @@ export async function GET(request: Request) {
           if (startUTC < CHALLENGE_START) continue;
           if (startUTC >= CHALLENGE_END) continue;
 
-          // A declared leave day lifts the office-hours exclusion.
+          // Night hours are excluded entirely for safety — not
+          // scored, not counted toward distance. A leave day does not
+          // lift this the way it lifts office hours.
+          if (overlapsNightHours(startUTC, a.moving_time || 0)) continue;
+          if (!a.on_leave_day && overlapsWorkingHours(startUTC, a.moving_time || 0)) continue;
+
           // Mondays and Fridays are mandatory rest days from 14 Sep.
-        // Nothing on them scores.
-        if (isRestDayAt(startUTC)) continue;
-
-        // Night hours are excluded for safety, and a leave day does
-        // not lift them the way it lifts office hours.
-        if (overlapsNightHours(startUTC, a.moving_time || 0)) continue;
-        if (!a.on_leave_day && overlapsWorkingHours(startUTC, a.moving_time || 0)) continue;
-
+          // The km still counts toward the team's distance total —
+          // someone moving on a rest day shouldn't vanish from the
+          // page, just earn nothing for it.
           acc.add(
             a.start_date,
             disciplineOf(a.derived_type || a.type),
-            Number(a.distance || 0) / 1000
+            Number(a.distance || 0) / 1000,
+            !isRestDayAt(startUTC)
           );
         }
       }

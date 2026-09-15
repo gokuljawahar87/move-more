@@ -115,10 +115,13 @@ export async function GET() {
     const filtered = flat.filter((act) => {
       if (!act.start_date) return false;
       const startUTC = new Date(act.start_date);
-      // A declared leave day lifts the office-hours exclusion.
-      // Rest-day and night activity are both hidden, leave or not
-      if (isRestDayAt(startUTC)) return false;
+      // Night activity is hidden regardless of leave status — that
+      // exclusion is about safety, not scoring, so it stays absolute.
       if (overlapsNightHours(startUTC, act.moving_time || 0)) return false;
+      // Rest-day activity DOES show in the feed now — it earns no
+      // points (handled in the scoring routes), but hiding it here
+      // while counting its distance elsewhere would just look like a
+      // bug: someone's totals move and there's nothing to show why.
       if (act.on_leave_day) return true;
       return !overlapsWorkingHours(startUTC, act.moving_time || 0);
     });
@@ -128,6 +131,10 @@ export async function GET() {
       id: act.id,
       name: act.name,
       on_leave_day: act.on_leave_day ?? false,
+      // So the card can show "Rest day · no points" the way it already
+      // shows "On leave" — otherwise a rest-day activity with 0 points
+      // just looks like a scoring mistake.
+      is_rest_day: isRestDayAt(new Date(act.start_date)),
       type: act.derived_type || act.type,
       derived_type: act.derived_type,
       distance: act.distance,

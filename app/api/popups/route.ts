@@ -16,7 +16,6 @@ import {
   activeSeason,
   displayWindowStart,
   overlapsNightHours,
-  isRestDayAt,
 } from "@/lib/season";
 import { overlapsOfficeHours } from "@/lib/streak";
 import { DailyPoints, disciplineOf } from "@/lib/points";
@@ -104,8 +103,11 @@ async function scanForNewMilestones() {
     const counted = acts.filter((a: any) => {
       if (!a?.is_valid || !a.start_date) return false;
       const start = new Date(a.start_date);
-      // Rest days and night activity don't count toward milestones
-      if (isRestDayAt(start)) return false;
+      // Milestones are distance thresholds, not points — a rest day
+      // blocks POINTS, not the fact that someone moved. Rest-day km
+      // counts toward "50 km walked" the same as any other day's.
+      // Night activity still doesn't count: that exclusion is a
+      // safety rule, unrelated to rest days or scoring.
       if (overlapsNightHours(start, a.moving_time || 0)) return false;
       if (a.on_leave_day) return true;
       return !overlapsOfficeHours(start, a.moving_time || 0);

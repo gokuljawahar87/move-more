@@ -612,15 +612,9 @@ export async function GET() {
         // OFFICE-HOURS EXCLUSION
         // ────────────────────────────────────────────────────
 
-        // Mondays and Fridays are mandatory rest days from 14 Sep.
-        // Nothing recorded on one scores.
-        if (isRestDayAt(startUTC)) {
-          continue;
-        }
-
-        // Night hours are excluded for safety. Unlike office hours, a
-        // declared leave day does NOT lift this — nobody should be
-        // running unlit roads at two in the morning for a streak.
+        // Night hours are excluded entirely for safety — not scored,
+        // not counted toward distance. Unlike office hours, a declared
+        // leave day does NOT lift this.
         if (
           overlapsNightHours(
             startUTC,
@@ -643,13 +637,17 @@ export async function GET() {
         // Activity is fully qualified.
         counted.push(a);
 
-        // Add to DailyPoints.
+        // Mondays and Fridays are mandatory rest days from 14 Sep. The
+        // km still counts toward distance totals — someone moving on a
+        // rest day shouldn't be erased, just unscored — but it earns
+        // no points.
         acc.add(
           a.start_date,
           disciplineOf(
             a.derived_type || a.type
           ),
-          Number(a.distance || 0) / 1000
+          Number(a.distance || 0) / 1000,
+          !isRestDayAt(startUTC)
         );
       }
 

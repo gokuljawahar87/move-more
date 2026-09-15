@@ -143,20 +143,24 @@ export async function GET(req: Request) {
       for (const a of profile.activities) {
         if (!a?.is_valid || !a.start_date) continue;
         const startUTC = new Date(a.start_date);
-        // A declared leave day lifts the office-hours exclusion.
-        // Mondays and Fridays are mandatory rest days from 14 Sep.
-        // Nothing on them scores.
-        if (isRestDayAt(startUTC)) continue;
 
-        // Night hours are excluded for safety, and a leave day does
-        // not lift them the way it lifts office hours.
+        // Night hours are excluded entirely for safety — not scored,
+        // not shown, not counted toward distance or milestones. A
+        // leave day does not lift this the way it lifts office hours.
         if (overlapsNightHours(startUTC, a.moving_time || 0)) continue;
         if (!a.on_leave_day && overlapsWorkingHours(startUTC, a.moving_time || 0)) continue;
+
+        // Mondays and Fridays are mandatory rest days from 14 Sep. The
+        // km still counts — toward the You page, team totals and
+        // milestones — but it earns no points. Someone choosing to
+        // move on a rest day shouldn't have that erased, only unscored.
+        const restDay = isRestDayAt(startUTC);
 
         acc.add(
           a.start_date,
           disciplineOf(a.derived_type || a.type),
-          Number(a.distance || 0) / 1000
+          Number(a.distance || 0) / 1000,
+          !restDay
         );
       }
 
