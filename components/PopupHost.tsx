@@ -12,6 +12,7 @@ import {
   Flame,
   Share2,
 } from "lucide-react";
+import { teamLogo, teamName } from "@/lib/teams";
 
 type Popup = {
   kind: "announcement" | "milestone" | "champion";
@@ -26,6 +27,8 @@ type Popup = {
   /** walk | run | cycle | streak | points */
   metric?: string;
   threshold?: number;
+  /** The raw team string as stored on the event, resolved via lib/teams.ts */
+  team?: string | null;
   /** Champion popups only */
   week?: number;
   women?: ChampionEntry[];
@@ -134,7 +137,7 @@ function buildCaption(popup: Popup): string {
  * falls back to bold system fonts. Colours and layout carry the brand
  * identity instead.
  */
-function renderMilestoneImage(popup: Popup): Promise<Blob> {
+async function renderMilestoneImage(popup: Popup): Promise<Blob> {
   const W = 1080;
   const H = 1350;
   const badgeColour = BADGE_HEX[popup.metric ?? "points"] ?? HEX.tape;
@@ -215,6 +218,42 @@ function renderMilestoneImage(popup: Popup): Promise<Blob> {
   ctx.font = "600 44px system-ui, sans-serif";
   ctx.fillText(popup.title.toUpperCase(), cx, 970);
 
+  // Team — logo and name, right below the title. Drawn last among the
+  // content blocks so a slow-loading (or missing) logo can't hold up
+  // everything else; the image is only awaited here, once the rest of
+  // the layout is already committed to the canvas.
+  if (popup.team) {
+    const displayTeam = teamName(popup.team);
+    const logoUrl = teamLogo(popup.team);
+    const logoY = 1055;
+    const logoR = 46;
+
+    if (logoUrl) {
+      const img = await loadImage(logoUrl);
+      if (img) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, logoY, logoR, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+        ctx.drawImage(img, cx - logoR, logoY - logoR, logoR * 2, logoR * 2);
+        ctx.restore();
+
+        // A thin ring, matching the ring-1 ring-ink-700 treatment
+        // logos get everywhere else in the app.
+        ctx.beginPath();
+        ctx.arc(cx, logoY, logoR, 0, Math.PI * 2);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = HEX.dim;
+        ctx.stroke();
+      }
+    }
+
+    ctx.fillStyle = HEX.dim;
+    ctx.font = "600 32px system-ui, sans-serif";
+    ctx.fillText(displayTeam.toUpperCase(), cx, logoY + logoR + 50);
+  }
+
   // Footer
   ctx.fillStyle = HEX.dim;
   ctx.font = "500 28px system-ui, sans-serif";
@@ -243,6 +282,17 @@ function roundRect(
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
+}
+
+/** Resolves to null rather than rejecting, so a missing or broken
+ * logo just gets skipped instead of failing the whole share. */
+function loadImage(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
 }
 
 function downloadBlob(blob: Blob, filename: string) {

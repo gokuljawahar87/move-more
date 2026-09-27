@@ -297,6 +297,10 @@ export async function GET() {
           : `${e.name} just got there${e.team ? ` for ${e.team}` : ""}.`,
         who: mine ? null : e.name,
         mine,
+        // The raw team string as stored on the event, at the moment
+        // it was achieved. The client resolves it to a display name
+        // and logo via lib/teams.ts.
+        team: e.team ?? null,
       };
     };
 
