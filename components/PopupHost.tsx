@@ -10,6 +10,7 @@ import {
   Bike,
   Activity,
   Flame,
+  Share2,
 } from "lucide-react";
 
 type Popup = {
@@ -53,6 +54,218 @@ const BADGES: Record<
   points: { Icon: Trophy, colour: "var(--tape)", unit: "pts" },
 };
 
+
+/**
+ * Hex equivalents of the app's CSS colour variables.
+ *
+ * Canvas can't read `var(--walk)` the way the DOM can — it needs an
+ * actual colour value — so the same brand palette is repeated here as
+ * literal hex. Keep these in step with globals.css if the palette
+ * ever changes.
+ */
+const HEX = {
+  ink: "#150E22",
+  card: "#241A3A",
+  chalk: "#F5F3EE",
+  dim: "#C3BAD6",
+  tape: "#FFC93C",
+  run: "#FF7B7B",
+  walk: "#5FDCB2",
+  cycle: "#7FB5FF",
+} as const;
+
+const BADGE_HEX: Record<string, string> = {
+  walk: HEX.walk,
+  run: HEX.run,
+  cycle: HEX.cycle,
+  streak: HEX.tape,
+  points: HEX.tape,
+};
+
+const METRIC_EMOJI: Record<string, string> = {
+  walk: "\u{1F6B6}",
+  run: "\u{1F3C3}",
+  cycle: "\u{1F6B4}",
+  streak: "\u{1F525}",
+  points: "\u{1F3C6}",
+};
+
+/**
+ * The message that goes with the shared image.
+ *
+ * popup.title reads like "50 km on foot" or "10 days unbroken" — built
+ * for the card, where it sits under a name that's already on screen.
+ * As a sentence it needs a verb and the activity named properly, so
+ * this maps it to something that reads naturally on its own:
+ * "Congrats Arunkumar for hitting 50km in walking."
+ */
+const METRIC_LABEL: Record<string, string> = {
+  walk: "walking",
+  run: "running",
+  cycle: "cycling",
+  streak: "their streak",
+  points: "points",
+};
+
+function buildCaption(popup: Popup): string {
+  const metric = METRIC_LABEL[popup.metric ?? "points"] ?? "points";
+  const unit =
+    popup.metric === "streak"
+      ? "days"
+      : popup.metric === "points"
+      ? "points"
+      : "km";
+  const amount = `${popup.threshold}${unit}`;
+
+  // Just the one line — no footer, no extra encouragement underneath.
+  return popup.mine
+    ? `\u{1F3C5} Congrats to me for hitting ${amount} in ${metric}!`
+    : `\u{1F3C5} Congrats ${popup.who} for hitting ${amount} in ${metric}!`;
+}
+
+/**
+ * Draws a shareable version of the milestone card.
+ *
+ * A plain canvas rather than a screenshot library: the card is simple
+ * shapes and text, so there's no need for the extra dependency and
+ * load time a DOM-to-image tool would add. Exact brand fonts aren't
+ * used here — canvas needs a font-family name it can resolve, and
+ * matching the app's loaded fonts exactly would be fragile — so this
+ * falls back to bold system fonts. Colours and layout carry the brand
+ * identity instead.
+ */
+function renderMilestoneImage(popup: Popup): Promise<Blob> {
+  const W = 1080;
+  const H = 1350;
+  const badgeColour = BADGE_HEX[popup.metric ?? "points"] ?? HEX.tape;
+  const emoji = METRIC_EMOJI[popup.metric ?? "points"] ?? "\u{1F3C6}";
+
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+
+  // Background
+  ctx.fillStyle = HEX.ink;
+  ctx.fillRect(0, 0, W, H);
+
+  // Card panel
+  const pad = 64;
+  roundRect(ctx, pad, pad, W - pad * 2, H - pad * 2, 28);
+  ctx.fillStyle = HEX.card;
+  ctx.fill();
+
+  ctx.textAlign = "center";
+
+  // Emoji flourish
+  ctx.font = "84px sans-serif";
+  ctx.fillText(emoji, W / 2, 260);
+
+  // Kicker
+  ctx.fillStyle = HEX.dim;
+  ctx.font = "600 30px system-ui, sans-serif";
+  ctx.fillText((popup.kicker ?? "").toUpperCase(), W / 2, 320);
+
+  // Ring
+  const cx = W / 2;
+  const cy = 560;
+  const outerR = 200;
+
+  ctx.globalAlpha = 0.16;
+  ctx.beginPath();
+  ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+  ctx.fillStyle = badgeColour;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, outerR - 28, 0, Math.PI * 2);
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = badgeColour;
+  ctx.stroke();
+
+  // Number + unit, centred inside the ring
+  ctx.fillStyle = badgeColour;
+  ctx.font = "700 150px system-ui, sans-serif";
+  ctx.fillText(String(popup.threshold ?? ""), cx, cy + 45);
+
+  const unit =
+    popup.metric === "streak"
+      ? "DAYS"
+      : popup.metric === "points"
+      ? "PTS"
+      : "KM";
+  ctx.fillStyle = HEX.dim;
+  ctx.font = "600 34px system-ui, sans-serif";
+  ctx.fillText(unit, cx, cy + 100);
+
+  // Name — shrink to fit rather than overflow the card
+  const name = (popup.who ?? "You").toUpperCase();
+  let nameSize = 76;
+  ctx.font = `700 ${nameSize}px system-ui, sans-serif`;
+  while (ctx.measureText(name).width > W - pad * 3 && nameSize > 36) {
+    nameSize -= 4;
+    ctx.font = `700 ${nameSize}px system-ui, sans-serif`;
+  }
+  ctx.fillStyle = HEX.chalk;
+  ctx.fillText(name, cx, 900);
+
+  // Title
+  ctx.fillStyle = badgeColour;
+  ctx.font = "600 44px system-ui, sans-serif";
+  ctx.fillText(popup.title.toUpperCase(), cx, 970);
+
+  // Footer
+  ctx.fillStyle = HEX.dim;
+  ctx.font = "500 28px system-ui, sans-serif";
+  ctx.fillText("MOVE-ATHON MANIA \u00B7 SEASON 2", cx, H - pad - 30);
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("Could not render the image"));
+    }, "image/png");
+  });
+}
+
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Staged rollout for sharing.
+ *
+ * Only these user IDs see the Share button for now — with ~100 people
+ * in the group, everyone getting it at once would mean the WhatsApp
+ * group filling with milestone images the moment this deploys. Add IDs
+ * here to widen it, or empty the set to turn it on for everyone.
+ */
+const SHARE_ENABLED_FOR = new Set<string>(["U262861"]);
+
 /**
  * Shows at most one popup per app open.
  *
@@ -67,6 +280,24 @@ export default function PopupHost() {
   // rather than three of them going unrecognised.
   const [queue, setQueue] = useState<Popup[]>([]);
   const [leaving, setLeaving] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  // Read once on mount. Every other part of the app already relies on
+  // this same localStorage key to know who's signed in, so this reads
+  // the same source rather than adding a new one.
+  const [canShare, setCanShare] = useState(false);
+
+  useEffect(() => {
+    try {
+      const uid = localStorage.getItem("user_id");
+      setCanShare(
+        SHARE_ENABLED_FOR.size === 0 || (!!uid && SHARE_ENABLED_FOR.has(uid))
+      );
+    } catch {
+      // localStorage can throw in some locked-down browser contexts —
+      // default to not sharing rather than crash the popup.
+      setCanShare(false);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,6 +350,52 @@ export default function PopupHost() {
       }
     }, 200);
   }
+
+  /**
+   * Renders the card as an image and hands it to the device's share
+   * sheet with a caption. Falls back gracefully on browsers that can't
+   * share files (or can't share at all): plain text share, then — as a
+   * last resort — download the image and open WhatsApp Web with the
+   * caption pre-filled, so it can be attached by hand.
+   */
+  async function shareMilestone() {
+    if (!popup || sharing) return;
+    setSharing(true);
+
+    try {
+      const blob = await renderMilestoneImage(popup);
+      const caption = buildCaption(popup);
+      const file = new File([blob], "milestone.png", { type: "image/png" });
+      const nav = navigator as any;
+
+      if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
+        await nav.share({
+          files: [file],
+          text: caption,
+          title: "Move-Athon Mania",
+        });
+        return;
+      }
+
+      if (nav.share) {
+        await nav.share({ text: caption });
+        return;
+      }
+
+      // No share sheet at all — hand over both pieces separately.
+      downloadBlob(blob, "milestone.png");
+      window.open(`https://wa.me/?text=${encodeURIComponent(caption)}`, "_blank");
+    } catch (err: any) {
+      // Cancelling the native share sheet throws AbortError — that's
+      // the person changing their mind, not a failure.
+      if (err?.name !== "AbortError") {
+        console.error("Share failed:", err);
+      }
+    } finally {
+      setSharing(false);
+    }
+  }
+
 
   return (
     <>
@@ -249,6 +526,25 @@ export default function PopupHost() {
                 : "Thanks"
               : "Got it"}
           </button>
+
+          {/* Sharing is scoped to milestones — this is the case
+              someone actually wants to post to the group. Champion and
+              announcement cards can get the same treatment later if
+              it's wanted there too. */}
+          {isMilestone && canShare && (
+            <button
+              onClick={shareMilestone}
+              disabled={sharing}
+              className="w-full mt-2.5 flex items-center justify-center gap-2
+                         border border-ink-800 hover:border-tape hover:text-tape
+                         text-chalk-dim py-2.5 rounded-lg font-display font-600
+                         uppercase tracking-[0.1em] text-[12px] transition-colors
+                         disabled:opacity-50"
+            >
+              <Share2 size={14} />
+              {sharing ? "Preparing…" : "Share"}
+            </button>
+          )}
 
           {/* So people know the next card is a different person, not a
               glitch repeating itself. */}
